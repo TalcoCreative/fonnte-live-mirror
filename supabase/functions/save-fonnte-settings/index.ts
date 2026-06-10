@@ -1,4 +1,4 @@
-// Save Fonnte settings (admin only). Used so api_key writes are gated by role.
+// Save Fonnte settings (admin only). Validates key and auto-detects device number.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -29,13 +29,34 @@ Deno.serve(async (req) => {
   if (!isAdmin) return j({ error: "Forbidden" }, 403);
 
   const { api_key, device } = await req.json();
-  if (typeof api_key === "string") {
+  let detectedDevice: string | null = null;
+  let validateData: any = null;
+
+  if (typeof api_key === "string" && api_key) {
+    // Auto-detect device number by hitting /validate
+    try {
+      const r = await fetch("https://api.fonnte.com/validate", {
+        method: "GET", headers: { Authorization: api_key },
+      });
+      validateData = await r.json().catch(() => ({}));
+      // Fonnte returns either { device: "628xxx" } or { device: ["628xxx"] }
+      const d = validateData?.device;
+      if (Array.isArray(d)) detectedDevice = String(d[0] || "");
+      else if (d) detectedDevice = String(d);
+    } catch (e) {
+      console.error("validate fail", e);
+    }
+
     await admin.from("system_settings").upsert({ key: "fonnte_api_key", value: api_key, updated_by: u.user.id });
   }
-  if (typeof device === "string") {
-    await admin.from("system_settings").upsert({ key: "fonnte_device", value: device, updated_by: u.user.id });
+
+  // device: explicit input wins, otherwise auto-detected
+  const finalDevice = (typeof device === "string" && device) ? device : detectedDevice;
+  if (finalDevice) {
+    await admin.from("system_settings").upsert({ key: "fonnte_device", value: finalDevice, updated_by: u.user.id });
   }
-  return j({ ok: true });
+
+  return j({ ok: true, device: finalDevice, validate: validateData });
 
   function j(d: any, s = 200) {
     return new Response(JSON.stringify(d), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });

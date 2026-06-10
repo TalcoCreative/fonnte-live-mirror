@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+// tabs replaced with custom pill nav
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Loader2, Copy, ExternalLink, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -19,29 +19,44 @@ export const Route = createFileRoute("/_app/settings")({
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 function SettingsPage() {
+  const [tab, setTab] = useState("fonnte");
+  const tabs = [
+    { v: "fonnte", label: "Fonnte WA" },
+    { v: "quick", label: "Quick Replies" },
+    { v: "products", label: "Produk" },
+    { v: "team", label: "Tim Agent" },
+    { v: "webhook", label: "Webhook" },
+  ];
   return (
-    <div className="p-3 md:p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-3 md:p-6 max-w-6xl mx-auto space-y-5">
       <header>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground">Konfigurasi sistem, integrasi WhatsApp, tim, dan template balasan cepat.</p>
       </header>
-      <Tabs defaultValue="fonnte">
-        <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="fonnte">Fonnte WA</TabsTrigger>
-          <TabsTrigger value="quick">Quick Replies</TabsTrigger>
-          <TabsTrigger value="products">Produk</TabsTrigger>
-          <TabsTrigger value="team">Tim Agent</TabsTrigger>
-          <TabsTrigger value="webhook">Webhook</TabsTrigger>
-        </TabsList>
-        <TabsContent value="fonnte"><FonnteTab /></TabsContent>
-        <TabsContent value="quick"><QuickRepliesTab /></TabsContent>
-        <TabsContent value="products"><ProductsTab /></TabsContent>
-        <TabsContent value="team"><TeamTab /></TabsContent>
-        <TabsContent value="webhook"><WebhookTab /></TabsContent>
-      </Tabs>
+
+      {/* Segmented pill nav — wraps cleanly on mobile */}
+      <div className="flex flex-wrap gap-1.5 p-1.5 rounded-2xl bg-card border glow-soft">
+        {tabs.map((t) => (
+          <button key={t.v} onClick={() => setTab(t.v)}
+            className={`flex-1 min-w-[120px] px-3 py-2 rounded-xl text-xs md:text-sm font-medium transition-all ${
+              tab === t.v ? "bg-primary text-primary-foreground glow-primary" : "text-foreground/70 hover:bg-accent"
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div>
+        {tab === "fonnte" && <FonnteTab />}
+        {tab === "quick" && <QuickRepliesTab />}
+        {tab === "products" && <ProductsTab />}
+        {tab === "team" && <TeamTab />}
+        {tab === "webhook" && <WebhookTab />}
+      </div>
     </div>
   );
 }
+
 
 function QuickRepliesTab() {
   const [rows, setRows] = useState<any[]>([]);
@@ -136,9 +151,11 @@ function FonnteTab() {
     });
     const j = await res.json();
     setSaving(false);
-    if (!res.ok) toast.error(j.error || "Gagal menyimpan");
-    else toast.success("Tersimpan");
+    if (!res.ok) { toast.error(j.error || "Gagal menyimpan"); return; }
+    if (j.device) { setDevice(j.device); toast.success(`Tersimpan · Device terhubung: ${j.device}`); }
+    else { toast.success("Tersimpan (device tidak terdeteksi, periksa token)"); }
   }
+
 
   async function testConnection() {
     if (!apiKey) { toast.error("Masukkan API key dulu"); return; }
@@ -185,14 +202,25 @@ function FonnteTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {device && (
+            <div className="flex items-center gap-2 p-3 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-sm">
+              <CheckCircle2 className="size-4 text-emerald-600" />
+              <div>
+                <div className="font-medium text-emerald-700 dark:text-emerald-300">Device Aktif</div>
+                <div className="text-xs text-emerald-700/80 dark:text-emerald-300/80 font-mono">{device}</div>
+              </div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Fonnte API Token</Label>
             <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Token dari Fonnte" />
+            <p className="text-[11px] text-muted-foreground">Setelah Simpan, sistem akan otomatis mendeteksi nomor device dari token ini.</p>
           </div>
           <div className="space-y-1.5">
-            <Label>Nomor Device (opsional)</Label>
-            <Input value={device} onChange={(e) => setDevice(e.target.value)} placeholder="628xxx" />
+            <Label>Nomor Device (opsional, otomatis terdeteksi)</Label>
+            <Input value={device} onChange={(e) => setDevice(e.target.value)} placeholder="628xxx (otomatis)" />
           </div>
+
           <div className="flex flex-wrap gap-2">
             <Button onClick={save} disabled={saving}>
               {saving && <Loader2 className="size-4 mr-2 animate-spin" />} Simpan

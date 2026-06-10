@@ -40,14 +40,30 @@ Deno.serve(async (req) => {
     const message = String(payload.message || payload.text || payload.body || "").trim();
     const waName = (payload.name || payload.pushname || payload.sender_name || "").toString().trim() || null;
     const fonnteMsgId = payload.id || payload.message_id || null;
+    const deviceField = payload.device || payload.device_number || null;
 
     if (!sender) return json({ ok: false, error: "no sender" }, 400);
-    // Skip echo of our own outbound (Fonnte may notify us about messages we just sent)
-    if (payload.fromMe === true || payload.fromMe === "true" || payload.from_me === true) {
+
+    // 1) Skip self-echo flags
+    if (payload.fromMe === true || payload.fromMe === "true" || payload.from_me === true || payload.fromme === true) {
       return json({ ok: true, skip: "fromMe" });
     }
 
     const phone = normalizePhone(sender);
+
+    // 2) Skip echo by device number: if sender == our connected Fonnte device, this is outbound being mirrored back
+    const { data: settingsRows } = await admin
+      .from("system_settings").select("key,value")
+      .in("key", ["fonnte_device", "fonnte_api_key"]);
+    const settings: Record<string, string> = {};
+    (settingsRows || []).forEach((r: any) => { settings[r.key] = r.value; });
+    const deviceNumber = settings.fonnte_device ? normalizePhone(settings.fonnte_device) : null;
+    if (deviceNumber && phone === deviceNumber) {
+      return json({ ok: true, skip: "self-device" });
+    }
+    if (deviceField && normalizePhone(String(deviceField)) === phone) {
+      return json({ ok: true, skip: "device-equals-sender" });
+    }
 
     let { data: contact } = await admin.from("contacts").select("*").eq("whatsapp_number", phone).maybeSingle();
     const isExisting = !!contact;
@@ -76,27 +92,32 @@ Deno.serve(async (req) => {
       conv = newConv!;
     }
 
-    // Dedupe: if there's a recent OUTBOUND with identical content in last 3 minutes, treat this as echo
-    const threeMinAgo = new Date(Date.now() - 3 * 60_000).toISOString();
+    // 3) Dedupe by message id (also covers retries from Fonnte)
+    if (fonnteMsgId) {
+      const { data: dup } = await admin.from("messages").select("id")
+        .eq("fonnte_message_id", String(fonnteMsgId)).limit(1).maybeSingle();
+      if (dup) {
+        return json({ ok: true, skip: "duplicate-id" });
+      }
+    }
+
+    // 4) Dedupe by recent outbound content within 5 minutes (final safety)
+    const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
     const { data: echoMatch } = await admin
-      .from("messages")
-      .select("id")
-      .eq("conversation_id", conv.id)
-      .eq("direction", "OUTBOUND")
-      .eq("content", message)
-      .gte("sent_at", threeMinAgo)
-      .limit(1)
-      .maybeSingle();
+      .from("messages").select("id")
+      .eq("conversation_id", conv.id).eq("direction", "OUTBOUND")
+      .eq("content", message).gte("sent_at", fiveMinAgo)
+      .limit(1).maybeSingle();
     if (echoMatch) {
-      console.log("[fonnte-webhook] skip echo of own outbound", echoMatch.id);
-      return json({ ok: true, skip: "echo" });
+      console.log("[fonnte-webhook] skip content-echo of outbound", echoMatch.id);
+      return json({ ok: true, skip: "echo-content" });
     }
 
     const insert: any = {
       conversation_id: conv.id, direction: "INBOUND", type: "TEXT",
       content: message, status: "DELIVERED",
     };
-    if (fonnteMsgId) insert.fonnte_message_id = `in_${fonnteMsgId}`;
+    if (fonnteMsgId) insert.fonnte_message_id = String(fonnteMsgId);
     const { error: msgErr } = await admin.from("messages").insert(insert);
     if (msgErr && !msgErr.message.includes("duplicate")) console.error("msg insert err", msgErr);
 
@@ -115,9 +136,8 @@ Deno.serve(async (req) => {
 
     // Chatbot — only for brand-new leads. Existing leads (already have name) skip the bot entirely.
     if (!isExisting && contact.chatbot_state !== "done") {
-      await runChatbot(admin, contact, message, conv.id);
+      await runChatbot(admin, contact, message, conv.id, settings.fonnte_api_key);
     } else if (isExisting && contact.chatbot_state !== "done") {
-      // Mark existing contacts as done so the bot never runs against them
       await admin.from("contacts").update({ chatbot_state: "done" }).eq("id", contact.id);
     }
 
@@ -128,7 +148,7 @@ Deno.serve(async (req) => {
   }
 });
 
-async function runChatbot(admin: any, contact: any, message: string, convId: string) {
+async function runChatbot(admin: any, contact: any, message: string, convId: string, api_key?: string) {
   const state = contact.chatbot_state;
   const data = contact.chatbot_data || {};
   let reply = "";
@@ -157,7 +177,7 @@ async function runChatbot(admin: any, contact: any, message: string, convId: str
     nextState = "ask_complaint";
   } else if (state === "ask_complaint") {
     updates.chief_complaint = message.trim();
-    reply = `Terima kasih atas informasinya. Tim agent Rumah Sakit Husada akan segera membalas Anda. Mohon menunggu.`;
+    reply = `Terima kasih atas informasinya. Data Anda telah kami terima dan tim agent Rumah Sakit Husada akan segera membalas Anda. Mohon menunggu sebentar.`;
     nextState = "done";
   }
 
@@ -165,26 +185,22 @@ async function runChatbot(admin: any, contact: any, message: string, convId: str
   updates.chatbot_data = data;
   await admin.from("contacts").update(updates).eq("id", contact.id);
 
-  if (reply) {
-    const { data: settings } = await admin.from("system_settings").select("value").eq("key", "fonnte_api_key").maybeSingle();
-    const api_key = settings?.value;
-    if (api_key) {
-      const fd = new FormData();
-      fd.append("target", contact.whatsapp_number);
-      fd.append("message", reply);
-      try {
-        const fres = await fetch("https://api.fonnte.com/send", { method: "POST", headers: { Authorization: api_key }, body: fd });
-        const fdata = await fres.json().catch(() => ({}));
-        const fonnteId = Array.isArray(fdata.id) ? String(fdata.id[0]) : (fdata.id ? String(fdata.id) : null);
-        await admin.from("messages").insert({
-          conversation_id: convId, direction: "OUTBOUND", type: "TEXT",
-          content: reply, status: "SENT", fonnte_message_id: fonnteId,
-        });
-        await admin.from("conversations").update({
-          last_message_at: new Date().toISOString(),
-          last_message_preview: reply.slice(0, 100),
-        }).eq("id", convId);
-      } catch (e) { console.error("chatbot send fail", e); }
-    }
+  if (reply && api_key) {
+    const fd = new FormData();
+    fd.append("target", contact.whatsapp_number);
+    fd.append("message", reply);
+    try {
+      const fres = await fetch("https://api.fonnte.com/send", { method: "POST", headers: { Authorization: api_key }, body: fd });
+      const fdata = await fres.json().catch(() => ({}));
+      const fonnteId = Array.isArray(fdata.id) ? String(fdata.id[0]) : (fdata.id ? String(fdata.id) : null);
+      await admin.from("messages").insert({
+        conversation_id: convId, direction: "OUTBOUND", type: "TEXT",
+        content: reply, status: "SENT", fonnte_message_id: fonnteId,
+      });
+      await admin.from("conversations").update({
+        last_message_at: new Date().toISOString(),
+        last_message_preview: reply.slice(0, 100),
+      }).eq("id", convId);
+    } catch (e) { console.error("chatbot send fail", e); }
   }
 }
