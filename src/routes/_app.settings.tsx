@@ -202,14 +202,25 @@ function FonnteTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {device && (
+            <div className="flex items-center gap-2 p-3 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-sm">
+              <CheckCircle2 className="size-4 text-emerald-600" />
+              <div>
+                <div className="font-medium text-emerald-700 dark:text-emerald-300">Device Aktif</div>
+                <div className="text-xs text-emerald-700/80 dark:text-emerald-300/80 font-mono">{device}</div>
+              </div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Fonnte API Token</Label>
             <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="Token dari Fonnte" />
+            <p className="text-[11px] text-muted-foreground">Setelah Simpan, sistem akan otomatis mendeteksi nomor device dari token ini.</p>
           </div>
           <div className="space-y-1.5">
-            <Label>Nomor Device (opsional)</Label>
-            <Input value={device} onChange={(e) => setDevice(e.target.value)} placeholder="628xxx" />
+            <Label>Nomor Device (opsional, otomatis terdeteksi)</Label>
+            <Input value={device} onChange={(e) => setDevice(e.target.value)} placeholder="628xxx (otomatis)" />
           </div>
+
           <div className="flex flex-wrap gap-2">
             <Button onClick={save} disabled={saving}>
               {saving && <Loader2 className="size-4 mr-2 animate-spin" />} Simpan
