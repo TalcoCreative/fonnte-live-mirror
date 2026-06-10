@@ -223,7 +223,10 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     const { error } = await supabase.from("contacts").update({ stage_id: stageId }).eq("id", active.contact_id);
     if (error) return toast.error(error.message);
     await logAction("change_stage", {
+      contact_id: active.contact_id,
       contact_name: active.contact?.full_name, whatsapp: active.contact?.whatsapp_number,
+      from_stage_id: prevStageId,
+      to_stage_id: stageId,
       from_stage: stages.find((s) => s.id === prevStageId)?.name || null,
       to_stage: stages.find((s) => s.id === stageId)?.name || null,
     });
