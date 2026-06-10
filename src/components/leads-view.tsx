@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 
-type Stage = { id: string; name: string; color: string };
+type Stage = { id: string; name: string; color: string; is_default?: boolean };
 type Product = { id: string; name: string };
 type Profile = { id: string; full_name: string | null; email: string };
 type Contact = {
