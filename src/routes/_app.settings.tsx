@@ -20,23 +20,88 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 function SettingsPage() {
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-5">
+    <div className="p-3 md:p-6 max-w-5xl mx-auto space-y-5">
       <header>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-sm text-muted-foreground">Konfigurasi sistem CRM dan integrasi WhatsApp.</p>
+        <p className="text-sm text-muted-foreground">Konfigurasi sistem, integrasi WhatsApp, tim, dan template balasan cepat.</p>
       </header>
       <Tabs defaultValue="fonnte">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="fonnte">Fonnte WA</TabsTrigger>
+          <TabsTrigger value="quick">Quick Replies</TabsTrigger>
           <TabsTrigger value="products">Produk</TabsTrigger>
           <TabsTrigger value="team">Tim Agent</TabsTrigger>
           <TabsTrigger value="webhook">Webhook</TabsTrigger>
         </TabsList>
         <TabsContent value="fonnte"><FonnteTab /></TabsContent>
+        <TabsContent value="quick"><QuickRepliesTab /></TabsContent>
         <TabsContent value="products"><ProductsTab /></TabsContent>
         <TabsContent value="team"><TeamTab /></TabsContent>
         <TabsContent value="webhook"><WebhookTab /></TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function QuickRepliesTab() {
+  const [rows, setRows] = useState<any[]>([]);
+  const [name, setName] = useState("");
+  const [content, setContent] = useState("");
+
+  async function load() {
+    const { data } = await supabase.from("templates").select("*").eq("is_quick_reply", true).order("sort_order");
+    setRows(data || []);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function add() {
+    if (!name.trim() || !content.trim()) return toast.error("Nama & isi wajib diisi");
+    const { error } = await supabase.from("templates").insert({
+      name, content, is_quick_reply: true, sort_order: (rows[rows.length - 1]?.sort_order || 0) + 1, category: "custom",
+    });
+    if (error) toast.error(error.message);
+    else { setName(""); setContent(""); load(); toast.success("Quick reply ditambahkan"); }
+  }
+  async function update(id: string, patch: any) {
+    const { error } = await supabase.from("templates").update(patch).eq("id", id);
+    if (error) toast.error(error.message); else load();
+  }
+  async function remove(id: string) {
+    const { error } = await supabase.from("templates").delete().eq("id", id);
+    if (error) toast.error(error.message); else { toast.success("Dihapus"); load(); }
+  }
+
+  return (
+    <div className="space-y-4 mt-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Tambah Quick Reply</CardTitle>
+          <CardDescription>Gunakan placeholder <code className="text-xs bg-muted px-1 rounded">{"{agent}"}</code> untuk otomatis isi nama agent yang membalas.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input placeholder="Nama template (cth: Opening)" value={name} onChange={(e) => setName(e.target.value)} />
+          <Textarea rows={3} placeholder="Isi pesan..." value={content} onChange={(e) => setContent(e.target.value)} />
+          <Button onClick={add}>Tambah</Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Daftar Quick Replies ({rows.length})</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {rows.map((r) => (
+            <div key={r.id} className="border rounded-md p-3 space-y-2">
+              <Input value={r.name} onChange={(e) => setRows(rows.map(x => x.id === r.id ? { ...x, name: e.target.value } : x))}
+                onBlur={() => update(r.id, { name: r.name })} className="font-medium" />
+              <Textarea rows={2} value={r.content}
+                onChange={(e) => setRows(rows.map(x => x.id === r.id ? { ...x, content: e.target.value } : x))}
+                onBlur={() => update(r.id, { content: r.content })} />
+              <div className="flex justify-end">
+                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(r.id)}>Hapus</Button>
+              </div>
+            </div>
+          ))}
+          {!rows.length && <p className="text-sm text-muted-foreground">Belum ada quick reply.</p>}
+        </CardContent>
+      </Card>
     </div>
   );
 }

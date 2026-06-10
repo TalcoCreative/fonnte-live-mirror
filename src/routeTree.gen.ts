@@ -13,6 +13,8 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
+import { Route as AppMyLeadsRouteImport } from './routes/_app.my-leads'
+import { Route as AppMyInboxRouteImport } from './routes/_app.my-inbox'
 import { Route as AppLeadsRouteImport } from './routes/_app.leads'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
@@ -35,6 +37,16 @@ const IndexRoute = IndexRouteImport.update({
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMyLeadsRoute = AppMyLeadsRouteImport.update({
+  id: '/my-leads',
+  path: '/my-leads',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMyInboxRoute = AppMyInboxRouteImport.update({
+  id: '/my-inbox',
+  path: '/my-inbox',
   getParentRoute: () => AppRoute,
 } as any)
 const AppLeadsRoute = AppLeadsRouteImport.update({
@@ -65,6 +77,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/inbox': typeof AppInboxRoute
   '/leads': typeof AppLeadsRoute
+  '/my-inbox': typeof AppMyInboxRoute
+  '/my-leads': typeof AppMyLeadsRoute
   '/settings': typeof AppSettingsRoute
 }
 export interface FileRoutesByTo {
@@ -74,6 +88,8 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/inbox': typeof AppInboxRoute
   '/leads': typeof AppLeadsRoute
+  '/my-inbox': typeof AppMyInboxRoute
+  '/my-leads': typeof AppMyLeadsRoute
   '/settings': typeof AppSettingsRoute
 }
 export interface FileRoutesById {
@@ -85,6 +101,8 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/inbox': typeof AppInboxRoute
   '/_app/leads': typeof AppLeadsRoute
+  '/_app/my-inbox': typeof AppMyInboxRoute
+  '/_app/my-leads': typeof AppMyLeadsRoute
   '/_app/settings': typeof AppSettingsRoute
 }
 export interface FileRouteTypes {
@@ -96,6 +114,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/inbox'
     | '/leads'
+    | '/my-inbox'
+    | '/my-leads'
     | '/settings'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -105,6 +125,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/inbox'
     | '/leads'
+    | '/my-inbox'
+    | '/my-leads'
     | '/settings'
   id:
     | '__root__'
@@ -115,6 +137,8 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/inbox'
     | '/_app/leads'
+    | '/_app/my-inbox'
+    | '/_app/my-leads'
     | '/_app/settings'
   fileRoutesById: FileRoutesById
 }
@@ -154,6 +178,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/my-leads': {
+      id: '/_app/my-leads'
+      path: '/my-leads'
+      fullPath: '/my-leads'
+      preLoaderRoute: typeof AppMyLeadsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/my-inbox': {
+      id: '/_app/my-inbox'
+      path: '/my-inbox'
+      fullPath: '/my-inbox'
+      preLoaderRoute: typeof AppMyInboxRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/leads': {
       id: '/_app/leads'
       path: '/leads'
@@ -190,6 +228,8 @@ interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppInboxRoute: typeof AppInboxRoute
   AppLeadsRoute: typeof AppLeadsRoute
+  AppMyInboxRoute: typeof AppMyInboxRoute
+  AppMyLeadsRoute: typeof AppMyLeadsRoute
   AppSettingsRoute: typeof AppSettingsRoute
 }
 
@@ -198,6 +238,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppInboxRoute: AppInboxRoute,
   AppLeadsRoute: AppLeadsRoute,
+  AppMyInboxRoute: AppMyInboxRoute,
+  AppMyLeadsRoute: AppMyLeadsRoute,
   AppSettingsRoute: AppSettingsRoute,
 }
 

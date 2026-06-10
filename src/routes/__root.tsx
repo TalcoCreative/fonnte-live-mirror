@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "sonner";
+import husadaLogo from "@/assets/husada-logo.png.asset.json";
 
 function NotFoundComponent() {
   return (
@@ -78,24 +79,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Fonnte Connect & Chat enables real-time, mirrored live chat communication via the Fonnte API." },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Fonnte Connect & Chat enables real-time, mirrored live chat communication via the Fonnte API." },
+      { title: "Husada CRM" },
+      { name: "description", content: "CRM Rumah Sakit Husada terintegrasi WhatsApp via Fonnte." },
+      { name: "author", content: "Rumah Sakit Husada" },
+      { property: "og:title", content: "Husada CRM" },
+      { property: "og:description", content: "CRM Rumah Sakit Husada terintegrasi WhatsApp via Fonnte." },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: husadaLogo.url },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Lovable App" },
-      { name: "twitter:description", content: "Fonnte Connect & Chat enables real-time, mirrored live chat communication via the Fonnte API." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ab22272f-8e3b-4d53-b1ea-ece963a1dd8d/id-preview-a8d67d24--2da1e391-cc15-480c-882e-cacaa68cbad1.lovable.app-1781024763165.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ab22272f-8e3b-4d53-b1ea-ece963a1dd8d/id-preview-a8d67d24--2da1e391-cc15-480c-882e-cacaa68cbad1.lovable.app-1781024763165.png" },
+      { name: "twitter:title", content: "Husada CRM" },
+      { name: "twitter:description", content: "CRM Rumah Sakit Husada terintegrasi WhatsApp via Fonnte." },
+      { name: "twitter:image", content: husadaLogo.url },
     ],
     links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/png", href: husadaLogo.url },
+      { rel: "apple-touch-icon", href: husadaLogo.url },
+      { rel: "shortcut icon", href: husadaLogo.url },
     ],
   }),
   shellComponent: RootShell,

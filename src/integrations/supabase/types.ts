@@ -53,7 +53,9 @@ export type Database = {
           chief_complaint: string | null
           created_at: string
           current_medications: string | null
+          document_url: string | null
           domicile: string | null
+          estimated_revenue: number | null
           full_name: string | null
           id: string
           initial_question: string | null
@@ -74,7 +76,9 @@ export type Database = {
           chief_complaint?: string | null
           created_at?: string
           current_medications?: string | null
+          document_url?: string | null
           domicile?: string | null
+          estimated_revenue?: number | null
           full_name?: string | null
           id?: string
           initial_question?: string | null
@@ -95,7 +99,9 @@ export type Database = {
           chief_complaint?: string | null
           created_at?: string
           current_medications?: string | null
+          document_url?: string | null
           domicile?: string | null
+          estimated_revenue?: number | null
           full_name?: string | null
           id?: string
           initial_question?: string | null
@@ -130,6 +136,8 @@ export type Database = {
           assigned_agent_id: string | null
           contact_id: string
           created_at: string
+          first_inbound_at: string | null
+          first_response_at: string | null
           id: string
           last_message_at: string | null
           last_message_preview: string | null
@@ -142,6 +150,8 @@ export type Database = {
           assigned_agent_id?: string | null
           contact_id: string
           created_at?: string
+          first_inbound_at?: string | null
+          first_response_at?: string | null
           id?: string
           last_message_at?: string | null
           last_message_preview?: string | null
@@ -154,6 +164,8 @@ export type Database = {
           assigned_agent_id?: string | null
           contact_id?: string
           created_at?: string
+          first_inbound_at?: string | null
+          first_response_at?: string | null
           id?: string
           last_message_at?: string | null
           last_message_preview?: string | null
@@ -181,6 +193,7 @@ export type Database = {
           fonnte_message_id: string | null
           id: string
           media_url: string | null
+          response_seconds: number | null
           sent_at: string
           sent_by_id: string | null
           status: Database["public"]["Enums"]["message_status"]
@@ -194,6 +207,7 @@ export type Database = {
           fonnte_message_id?: string | null
           id?: string
           media_url?: string | null
+          response_seconds?: number | null
           sent_at?: string
           sent_by_id?: string | null
           status?: Database["public"]["Enums"]["message_status"]
@@ -207,6 +221,7 @@ export type Database = {
           fonnte_message_id?: string | null
           id?: string
           media_url?: string | null
+          response_seconds?: number | null
           sent_at?: string
           sent_by_id?: string | null
           status?: Database["public"]["Enums"]["message_status"]
@@ -345,21 +360,27 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          is_quick_reply: boolean | null
           name: string
+          sort_order: number | null
         }
         Insert: {
           category?: string | null
           content: string
           created_at?: string
           id?: string
+          is_quick_reply?: boolean | null
           name: string
+          sort_order?: number | null
         }
         Update: {
           category?: string | null
           content?: string
           created_at?: string
           id?: string
+          is_quick_reply?: boolean | null
           name?: string
+          sort_order?: number | null
         }
         Relationships: []
       }
