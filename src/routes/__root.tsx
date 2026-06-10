@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "sonner";
+import husadaLogo from "@/assets/husada-logo.png.asset.json";
 
 function NotFoundComponent() {
   return (
