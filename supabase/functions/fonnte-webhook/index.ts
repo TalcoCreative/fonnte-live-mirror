@@ -37,21 +37,36 @@ Deno.serve(async (req) => {
     console.log("[fonnte-webhook] payload:", JSON.stringify(payload));
 
     const sender = payload.sender || payload.from || payload.number;
-    const message = String(payload.message || payload.text || payload.body || "").trim();
+    const rawMessage = String(payload.message || payload.text || payload.body || "");
+    // Strip Fonnte watermark suffix ("\n\n> _Sent via fonnte.com_")
+    const WATERMARK_RE = /\s*>?\s*_?Sent via fonnte\.com_?\s*$/i;
+    const hasWatermark = /Sent via fonnte\.com/i.test(rawMessage);
+    const message = rawMessage.replace(WATERMARK_RE, "").trim();
     const waName = (payload.name || payload.pushname || payload.sender_name || "").toString().trim() || null;
     const fonnteMsgId = payload.id || payload.message_id || null;
     const deviceField = payload.device || payload.device_number || null;
 
     if (!sender) return json({ ok: false, error: "no sender" }, 400);
 
+    // Skip Fonnte status callbacks (state: sent/delivered/read) — no message body
+    if (!rawMessage && (payload.state || payload.status)) {
+      return json({ ok: true, skip: "status-callback" });
+    }
+
     // 1) Skip self-echo flags
     if (payload.fromMe === true || payload.fromMe === "true" || payload.from_me === true || payload.fromme === true) {
       return json({ ok: true, skip: "fromMe" });
     }
 
+    // 1b) Watermark = our own outbound mirrored back by Fonnte sync. Always skip.
+    if (hasWatermark) {
+      console.log("[fonnte-webhook] skip watermark-echo");
+      return json({ ok: true, skip: "fonnte-watermark-echo" });
+    }
+
     const phone = normalizePhone(sender);
 
-    // 2) Skip echo by device number: if sender == our connected Fonnte device, this is outbound being mirrored back
+    // 2) Skip echo by device number
     const { data: settingsRows } = await admin
       .from("system_settings").select("key,value")
       .in("key", ["fonnte_device", "fonnte_api_key"]);
