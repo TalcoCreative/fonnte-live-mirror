@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  LayoutDashboard, MessageSquare, Users, Settings, LogOut, Send, Inbox, UserCircle2,
+  LayoutDashboard, MessageSquare, Users, Settings, LogOut, Send, Inbox, UserCircle2, Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import husadaLogo from "@/assets/husada-logo.png.asset.json";
