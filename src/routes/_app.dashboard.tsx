@@ -40,8 +40,8 @@ function Dashboard() {
 
   useEffect(() => {
     (async () => {
-      const [contacts, openConv, msgsList, profiles, respMsgs] = await Promise.all([
-        supabase.from("contacts").select("id, estimated_revenue, stage_id, stages(name, color)"),
+      const [contacts, openConv, msgsList, profiles, respMsgs, stageLogs, allConvs] = await Promise.all([
+        supabase.from("contacts").select("id, estimated_revenue, stage_id, created_at, stages(name, color)"),
         supabase.from("conversations").select("id, assigned_agent_id, last_message_at", { count: "exact" }).eq("status", "OPEN"),
         supabase.from("messages").select("sent_at, direction")
           .gte("sent_at", startISO).lte("sent_at", endISO),
@@ -49,6 +49,11 @@ function Dashboard() {
         supabase.from("messages").select("sent_by_id, response_seconds")
           .gte("sent_at", startISO).lte("sent_at", endISO)
           .eq("direction", "OUTBOUND").not("response_seconds", "is", null),
+        supabase.from("activity_logs").select("entity_id, metadata, created_at")
+          .eq("action", "change_stage")
+          .gte("created_at", startISO).lte("created_at", endISO)
+          .order("created_at", { ascending: true }),
+        supabase.from("conversations").select("id, contact_id, created_at"),
       ]);
 
       const byStage: Record<string, { name: string; color: string; count: number }> = {};
@@ -93,6 +98,50 @@ function Dashboard() {
       const dailySeries = Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date))
         .map((d) => ({ ...d, label: d.date.slice(5) }));
 
+      // Avg stage transition time (from log[i-1] to log[i] per contact)
+      // group change_stage logs by contact_id (from metadata) - fallback via conversation->contact
+      const convToContact: Record<string, string> = {};
+      (allConvs.data || []).forEach((c: any) => { convToContact[c.id] = c.contact_id; });
+      const contactCreated: Record<string, string> = {};
+      (contacts.data || []).forEach((c: any) => { contactCreated[c.id] = c.created_at; });
+
+      const perContactLogs: Record<string, any[]> = {};
+      (stageLogs.data || []).forEach((l: any) => {
+        const m = l.metadata || {};
+        const cid = m.contact_id || convToContact[l.entity_id];
+        if (!cid) return;
+        perContactLogs[cid] = perContactLogs[cid] || [];
+        perContactLogs[cid].push(l);
+      });
+
+      const edgeAgg: Record<string, { from: string; to: string; total: number; count: number }> = {};
+      Object.entries(perContactLogs).forEach(([cid, lgs]) => {
+        lgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        let prevTime = contactCreated[cid] ? new Date(contactCreated[cid]).getTime() : null;
+        lgs.forEach((l: any) => {
+          const m = l.metadata || {};
+          const from = m.from_stage || "Awal";
+          const to = m.to_stage || "—";
+          const t = new Date(l.created_at).getTime();
+          if (prevTime !== null) {
+            const dur = (t - prevTime) / 1000;
+            if (dur > 0) {
+              const key = `${from}→${to}`;
+              edgeAgg[key] = edgeAgg[key] || { from, to, total: 0, count: 0 };
+              edgeAgg[key].total += dur;
+              edgeAgg[key].count++;
+            }
+          }
+          prevTime = t;
+        });
+      });
+      const transitions = Object.values(edgeAgg).map((e) => ({
+        edge: `${e.from} → ${e.to}`,
+        count: e.count,
+        avgSec: Math.round(e.total / e.count),
+        avgHours: +(e.total / e.count / 3600).toFixed(2),
+      })).sort((a, b) => b.count - a.count);
+
       const myInbox = (openConv.data || []).filter((c: any) => c.assigned_agent_id === user?.id).length;
       const { data: myConvs } = await supabase.from("conversations").select("contact_id").eq("assigned_agent_id", user?.id || "00000000-0000-0000-0000-000000000000");
       const myLeadIds = new Set((myConvs || []).map((c: any) => c.contact_id));
@@ -103,7 +152,7 @@ function Dashboard() {
         openConv: openConv.count || 0,
         messagesRange: (msgsList.data || []).length,
         teamAvg, agentStats, stageDist, topStage, totalRevenue,
-        myInbox, myLeads: myLeadCount, dailySeries,
+        myInbox, myLeads: myLeadCount, dailySeries, transitions,
       });
     })();
   }, [startISO, endISO, user?.id]);
