@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+// tabs replaced with custom pill nav
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Loader2, Copy, ExternalLink, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
