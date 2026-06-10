@@ -109,10 +109,3 @@ Deno.serve(async (req) => {
     return j({ error: String(e) }, 500);
   }
 });
-
-    return j({ error: "Unknown action" }, 400);
-  } catch (e) {
-    console.error("manage-agent fatal", e);
-    return j({ error: String(e) }, 500);
-  }
-});
