@@ -157,7 +157,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     setText("");
 
     if (mode === "note") {
-      // Internal note: insert directly, never sent to user via Fonnte
+      // Internal note: insert directly, never sent via WhatsApp gateway
       const { error } = await supabase.from("messages").insert({
         conversation_id: activeId,
         direction: "OUTBOUND",
