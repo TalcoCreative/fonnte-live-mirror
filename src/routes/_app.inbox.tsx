@@ -174,19 +174,55 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); }
   }
 
+  async function logAction(action: string, metadata: Record<string, any> = {}) {
+    if (!user) return;
+    await supabase.from("activity_logs").insert({
+      user_id: user.id, action,
+      entity_type: "conversation", entity_id: activeId,
+      metadata,
+    } as any);
+  }
+
   async function assignAgent(agentId: string | null) {
     if (!activeId) return;
+    const prev = active?.assigned_agent_id || null;
     const { error } = await supabase.from("conversations").update({ assigned_agent_id: agentId }).eq("id", activeId);
     if (error) return toast.error(error.message);
+    await logAction("assign_agent", {
+      contact_name: active?.contact?.full_name, whatsapp: active?.contact?.whatsapp_number,
+      from_agent: prev, to_agent: agentId,
+      from_name: agentName(prev), to_name: agentName(agentId),
+    });
     toast.success(agentId ? `Ditugaskan ke ${agentName(agentId)}` : "Penugasan dihapus");
     loadConversations();
   }
 
   async function changeStage(stageId: string) {
     if (!active?.contact_id) return;
+    const prevStageId = active.contact?.stage_id || null;
     const { error } = await supabase.from("contacts").update({ stage_id: stageId }).eq("id", active.contact_id);
     if (error) return toast.error(error.message);
+    await logAction("change_stage", {
+      contact_name: active.contact?.full_name, whatsapp: active.contact?.whatsapp_number,
+      from_stage: stages.find((s) => s.id === prevStageId)?.name || null,
+      to_stage: stages.find((s) => s.id === stageId)?.name || null,
+    });
     toast.success("Stage diperbarui");
+    loadConversations();
+  }
+
+  async function deleteConversation() {
+    if (!active) return;
+    // Delete conversation (cascade removes messages). Reset chatbot_state so the next inbound restarts the bot — but keep the lead (contact) so name/phone/keluhan get UPDATED in place on the next round.
+    const { error: delErr } = await supabase.from("conversations").delete().eq("id", active.id);
+    if (delErr) return toast.error(delErr.message);
+    await supabase.from("contacts").update({ chatbot_state: null }).eq("id", active.contact_id);
+    await logAction("delete_chat", {
+      contact_name: active.contact?.full_name, whatsapp: active.contact?.whatsapp_number,
+      message_count: messages.length,
+    });
+    toast.success("Percakapan dihapus. Bot akan menanyakan ulang saat pesan berikutnya masuk.");
+    setActiveId(null);
     loadConversations();
   }
 
