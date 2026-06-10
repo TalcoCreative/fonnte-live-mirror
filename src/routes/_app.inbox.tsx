@@ -536,3 +536,37 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     </div>
   );
 }
+
+function DeleteChatButton({ onConfirm, variant }: { onConfirm: () => void; variant: "desktop" | "mobile" }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        {variant === "desktop" ? (
+          <Button size="sm" variant="ghost" className="h-8 text-xs text-destructive hover:bg-destructive/10 gap-1">
+            <Trash2 className="size-3.5" /> Hapus
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" className="w-full h-9 text-xs text-destructive border-destructive/40 gap-1.5">
+            <Trash2 className="size-3.5" /> Hapus percakapan
+          </Button>
+        )}
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Hapus percakapan?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Semua pesan dalam percakapan ini akan dihapus permanen. Data lead (nama, nomor, stage) tetap tersimpan di Leads.
+            Saat user mengirim pesan baru, bot akan menanyakan ulang produk, domisili, dan keluhan — lalu mengupdate data lead.
+            Tindakan ini akan dicatat di Log Aktivitas.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Batal</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            Ya, hapus
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
