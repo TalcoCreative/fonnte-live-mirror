@@ -38,27 +38,34 @@ Deno.serve(async (req) => {
 
     const sender = payload.sender || payload.from || payload.number;
     const message = String(payload.message || payload.text || payload.body || "").trim();
-    const name = payload.name || null;
+    const waName = (payload.name || payload.pushname || payload.sender_name || "").toString().trim() || null;
     const fonnteMsgId = payload.id || payload.message_id || null;
 
     if (!sender) return json({ ok: false, error: "no sender" }, 400);
-    if (payload.fromMe === true || payload.fromMe === "true") return json({ ok: true, skip: "fromMe" });
+    // Skip echo of our own outbound (Fonnte may notify us about messages we just sent)
+    if (payload.fromMe === true || payload.fromMe === "true" || payload.from_me === true) {
+      return json({ ok: true, skip: "fromMe" });
+    }
 
     const phone = normalizePhone(sender);
 
     let { data: contact } = await admin.from("contacts").select("*").eq("whatsapp_number", phone).maybeSingle();
+    const isExisting = !!contact;
 
     if (!contact) {
       const { data: defaultStage } = await admin.from("stages").select("id").eq("is_default", true).maybeSingle();
       const { data: newC } = await admin.from("contacts").insert({
         whatsapp_number: phone,
-        full_name: name,
+        full_name: waName,
         stage_id: defaultStage?.id || null,
         source: "whatsapp",
         last_interaction_at: new Date().toISOString(),
         total_messages: 0,
       }).select().single();
       contact = newC!;
+    } else if (!contact.full_name && waName) {
+      await admin.from("contacts").update({ full_name: waName }).eq("id", contact.id);
+      contact.full_name = waName;
     }
 
     let { data: conv } = await admin.from("conversations").select("*").eq("contact_id", contact.id).eq("status", "OPEN").order("created_at", { ascending: false }).maybeSingle();
@@ -67,6 +74,22 @@ Deno.serve(async (req) => {
         contact_id: contact.id, status: "OPEN", first_inbound_at: new Date().toISOString(),
       }).select().single();
       conv = newConv!;
+    }
+
+    // Dedupe: if there's a recent OUTBOUND with identical content in last 3 minutes, treat this as echo
+    const threeMinAgo = new Date(Date.now() - 3 * 60_000).toISOString();
+    const { data: echoMatch } = await admin
+      .from("messages")
+      .select("id")
+      .eq("conversation_id", conv.id)
+      .eq("direction", "OUTBOUND")
+      .eq("content", message)
+      .gte("sent_at", threeMinAgo)
+      .limit(1)
+      .maybeSingle();
+    if (echoMatch) {
+      console.log("[fonnte-webhook] skip echo of own outbound", echoMatch.id);
+      return json({ ok: true, skip: "echo" });
     }
 
     const insert: any = {
@@ -90,9 +113,12 @@ Deno.serve(async (req) => {
       total_messages: (contact.total_messages || 0) + 1,
     }).eq("id", contact.id);
 
-    // Chatbot
-    if (contact.chatbot_state !== "done") {
+    // Chatbot — only for brand-new leads. Existing leads (already have name) skip the bot entirely.
+    if (!isExisting && contact.chatbot_state !== "done") {
       await runChatbot(admin, contact, message, conv.id);
+    } else if (isExisting && contact.chatbot_state !== "done") {
+      // Mark existing contacts as done so the bot never runs against them
+      await admin.from("contacts").update({ chatbot_state: "done" }).eq("id", contact.id);
     }
 
     return json({ ok: true, contact_id: contact.id, conversation_id: conv.id });
@@ -120,15 +146,11 @@ async function runChatbot(admin: any, contact: any, message: string, convId: str
     if (Number.isInteger(idx) && products && idx >= 1 && idx <= products.length) {
       updates.interested_product_id = products[idx - 1].id;
       data.product_name = products[idx - 1].name;
-      reply = `Anda memilih: ${products[idx - 1].name}.\n\nBoleh tahu nama lengkap Anda?`;
-      nextState = "ask_name";
+      reply = `Anda memilih: ${products[idx - 1].name}.\n\nDomisili Anda di kota mana?`;
+      nextState = "ask_domicile";
     } else {
       reply = `Mohon balas dengan angka pilihan layanan:\n\n${productList}`;
     }
-  } else if (state === "ask_name") {
-    updates.full_name = message.trim();
-    reply = `Terima kasih, ${message.trim()}.\n\nDomisili Anda di kota mana?`;
-    nextState = "ask_domicile";
   } else if (state === "ask_domicile") {
     updates.domicile = message.trim();
     reply = `Baik. Mohon ceritakan keluhan atau pertanyaan Anda secara singkat.`;
