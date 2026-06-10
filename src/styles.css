@@ -139,3 +139,6 @@
       radial-gradient(at 50% 92%, color-mix(in oklab, var(--primary) 18%, transparent) 0px, transparent 55%);
   }
 }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
