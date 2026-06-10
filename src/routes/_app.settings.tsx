@@ -19,29 +19,44 @@ export const Route = createFileRoute("/_app/settings")({
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 function SettingsPage() {
+  const [tab, setTab] = useState("fonnte");
+  const tabs = [
+    { v: "fonnte", label: "Fonnte WA" },
+    { v: "quick", label: "Quick Replies" },
+    { v: "products", label: "Produk" },
+    { v: "team", label: "Tim Agent" },
+    { v: "webhook", label: "Webhook" },
+  ];
   return (
-    <div className="p-3 md:p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-3 md:p-6 max-w-6xl mx-auto space-y-5">
       <header>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground">Konfigurasi sistem, integrasi WhatsApp, tim, dan template balasan cepat.</p>
       </header>
-      <Tabs defaultValue="fonnte">
-        <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="fonnte">Fonnte WA</TabsTrigger>
-          <TabsTrigger value="quick">Quick Replies</TabsTrigger>
-          <TabsTrigger value="products">Produk</TabsTrigger>
-          <TabsTrigger value="team">Tim Agent</TabsTrigger>
-          <TabsTrigger value="webhook">Webhook</TabsTrigger>
-        </TabsList>
-        <TabsContent value="fonnte"><FonnteTab /></TabsContent>
-        <TabsContent value="quick"><QuickRepliesTab /></TabsContent>
-        <TabsContent value="products"><ProductsTab /></TabsContent>
-        <TabsContent value="team"><TeamTab /></TabsContent>
-        <TabsContent value="webhook"><WebhookTab /></TabsContent>
-      </Tabs>
+
+      {/* Segmented pill nav — wraps cleanly on mobile */}
+      <div className="flex flex-wrap gap-1.5 p-1.5 rounded-2xl bg-card border glow-soft">
+        {tabs.map((t) => (
+          <button key={t.v} onClick={() => setTab(t.v)}
+            className={`flex-1 min-w-[120px] px-3 py-2 rounded-xl text-xs md:text-sm font-medium transition-all ${
+              tab === t.v ? "bg-primary text-primary-foreground glow-primary" : "text-foreground/70 hover:bg-accent"
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div>
+        {tab === "fonnte" && <FonnteTab />}
+        {tab === "quick" && <QuickRepliesTab />}
+        {tab === "products" && <ProductsTab />}
+        {tab === "team" && <TeamTab />}
+        {tab === "webhook" && <WebhookTab />}
+      </div>
     </div>
   );
 }
+
 
 function QuickRepliesTab() {
   const [rows, setRows] = useState<any[]>([]);
