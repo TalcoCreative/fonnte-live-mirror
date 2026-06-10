@@ -94,6 +94,7 @@ Deno.serve(async (req) => {
       const patch: Record<string, any> = {};
       if (typeof body.full_name === "string") patch.full_name = body.full_name.trim();
       if (typeof body.position === "string") patch.position = body.position.trim();
+      if (typeof body.phone === "string") patch.phone = normPhone(body.phone);
       if (Object.keys(patch).length) await admin.from("profiles").update(patch).eq("id", target);
       if (typeof body.role === "string" && body.role) {
         await admin.from("user_roles").delete().eq("user_id", target);
@@ -101,6 +102,13 @@ Deno.serve(async (req) => {
       }
       return j({ ok: true });
     }
+
+    return j({ error: "Unknown action" }, 400);
+  } catch (e) {
+    console.error("manage-agent fatal", e);
+    return j({ error: String(e) }, 500);
+  }
+});
 
     return j({ error: "Unknown action" }, 400);
   } catch (e) {
