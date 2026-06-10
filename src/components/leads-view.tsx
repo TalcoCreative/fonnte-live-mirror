@@ -134,8 +134,9 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
         source: row[idx("source")] || null,
         notes: row[idx("notes")] || null,
         document_url: row[idx("document_url")] || null,
+        source: row[idx("source")] || null,
         chatbot_state: "done",
-      }, { onConflict: "whatsapp_number" });
+      } as any, { onConflict: "whatsapp_number" });
       if (error) failed++; else success++;
     }
     toast.success(`Import selesai: ${success} berhasil, ${failed} gagal`);
