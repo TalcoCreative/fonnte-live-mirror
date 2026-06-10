@@ -500,14 +500,26 @@ function TeamTab() {
                         </Badge>
                       ))}
                     </div>
-                    <div className="text-xs text-muted-foreground">{r.email}</div>
+                    <div className="text-xs text-muted-foreground">{r.email}{r.phone ? ` · ${r.phone}` : ""}</div>
                   </div>
                   <Input
                     defaultValue={r.position || ""}
                     placeholder="Jabatan..."
-                    className="h-9 text-xs w-full md:w-52"
+                    className="h-9 text-xs w-full md:w-44"
                     onBlur={(e) => {
                       if (e.target.value !== (r.position || "")) savePosition(r.id, e.target.value);
+                    }}
+                  />
+                  <Input
+                    defaultValue={r.phone || ""}
+                    placeholder="62..."
+                    className="h-9 text-xs w-full md:w-40"
+                    onBlur={async (e) => {
+                      const v = e.target.value.trim();
+                      if (v !== (r.phone || "")) {
+                        try { await callManageAgent({ action: "update", user_id: r.id, phone: v }); toast.success("Nomor diperbarui"); load(); }
+                        catch (err: any) { toast.error(err.message); }
+                      }
                     }}
                   />
                   <Button
