@@ -7,6 +7,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Legend,
+} from "recharts";
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — Husada CRM" }] }),
@@ -36,16 +40,15 @@ function Dashboard() {
 
   useEffect(() => {
     (async () => {
-      const [contacts, openConv, msgsRange, profiles, respMsgs, stages] = await Promise.all([
+      const [contacts, openConv, msgsList, profiles, respMsgs] = await Promise.all([
         supabase.from("contacts").select("id, estimated_revenue, stage_id, stages(name, color)"),
         supabase.from("conversations").select("id, assigned_agent_id, last_message_at", { count: "exact" }).eq("status", "OPEN"),
-        supabase.from("messages").select("id", { count: "exact", head: true })
+        supabase.from("messages").select("sent_at, direction")
           .gte("sent_at", startISO).lte("sent_at", endISO),
         supabase.from("profiles").select("id, full_name, email"),
         supabase.from("messages").select("sent_by_id, response_seconds")
           .gte("sent_at", startISO).lte("sent_at", endISO)
           .eq("direction", "OUTBOUND").not("response_seconds", "is", null),
-        supabase.from("stages").select("id, name, color").order("order_index"),
       ]);
 
       const byStage: Record<string, { name: string; color: string; count: number }> = {};
@@ -76,12 +79,21 @@ function Dashboard() {
         id,
         name: profMap[id]?.full_name || profMap[id]?.email?.split("@")[0] || "Agent",
         avg: Math.round(v.total / v.count),
+        avgMin: +(v.total / v.count / 60).toFixed(1),
         count: v.count,
       })).sort((a, b) => a.avg - b.avg);
 
+      // Daily message volume
+      const dayMap: Record<string, { date: string; in: number; out: number }> = {};
+      (msgsList.data || []).forEach((m: any) => {
+        const d = new Date(m.sent_at).toISOString().slice(0, 10);
+        dayMap[d] = dayMap[d] || { date: d, in: 0, out: 0 };
+        if (m.direction === "INBOUND") dayMap[d].in++; else dayMap[d].out++;
+      });
+      const dailySeries = Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date))
+        .map((d) => ({ ...d, label: d.date.slice(5) }));
+
       const myInbox = (openConv.data || []).filter((c: any) => c.assigned_agent_id === user?.id).length;
-      const myLeads = (contacts.data || []).filter((c: any) => false).length; // computed below
-      // For my leads: need a per-contact assignment lookup
       const { data: myConvs } = await supabase.from("conversations").select("contact_id").eq("assigned_agent_id", user?.id || "00000000-0000-0000-0000-000000000000");
       const myLeadIds = new Set((myConvs || []).map((c: any) => c.contact_id));
       const myLeadCount = (contacts.data || []).filter((c: any) => myLeadIds.has(c.id)).length;
@@ -89,9 +101,9 @@ function Dashboard() {
       setData({
         totalContacts: (contacts.data || []).length,
         openConv: openConv.count || 0,
-        messagesRange: msgsRange.count || 0,
+        messagesRange: (msgsList.data || []).length,
         teamAvg, agentStats, stageDist, topStage, totalRevenue,
-        myInbox, myLeads: myLeadCount,
+        myInbox, myLeads: myLeadCount, dailySeries,
       });
     })();
   }, [startISO, endISO, user?.id]);
@@ -145,32 +157,95 @@ function Dashboard() {
         <StatCard icon={Wallet} label="Est. Revenue" value={`Rp ${(data?.totalRevenue || 0).toLocaleString("id-ID")}`} />
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card className="glow-soft">
-          <CardHeader><CardTitle className="text-base">Distribusi Stage</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {(data?.stageDist || []).map((s: any) => (
-              <div key={s.name} className="flex items-center gap-3">
-                <div className="size-3 rounded-full" style={{ background: s.color }} />
-                <div className="flex-1 text-sm">{s.name}</div>
-                <div className="text-sm font-semibold">{s.count}</div>
-              </div>
-            ))}
-            {!data?.stageDist?.length && <p className="text-sm text-muted-foreground">Belum ada lead.</p>}
+      {/* Charts row 1 */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        <Card className="glow-soft lg:col-span-2">
+          <CardHeader><CardTitle className="text-base">Volume Pesan Harian</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={data?.dailySeries || []}>
+                <defs>
+                  <linearGradient id="gIn" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gOut" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis dataKey="label" fontSize={11} />
+                <YAxis fontSize={11} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Area type="monotone" dataKey="in" name="Masuk" stroke="hsl(var(--primary))" fill="url(#gIn)" strokeWidth={2} />
+                <Area type="monotone" dataKey="out" name="Keluar" stroke="#10b981" fill="url(#gOut)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
         <Card className="glow-soft">
-          <CardHeader><CardTitle className="text-base">Respon Time per Agent</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {(data?.agentStats || []).map((a: any) => (
-              <div key={a.id} className="flex items-center gap-3">
-                <div className="flex-1 text-sm">{a.name}</div>
-                <div className="text-xs text-muted-foreground">{a.count} balasan</div>
-                <div className="text-sm font-semibold tabular-nums">{fmtSec(a.avg)}</div>
-              </div>
-            ))}
-            {!data?.agentStats?.length && <p className="text-sm text-muted-foreground">Belum ada data respon.</p>}
+          <CardHeader><CardTitle className="text-base">Distribusi Stage</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={data?.stageDist || []} dataKey="count" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}>
+                  {(data?.stageDist || []).map((s: any, i: number) => (
+                    <Cell key={i} fill={s.color || "#888"} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-1 mt-2 max-h-32 overflow-auto">
+              {(data?.stageDist || []).map((s: any) => (
+                <div key={s.name} className="flex items-center gap-2 text-xs">
+                  <div className="size-2 rounded-full shrink-0" style={{ background: s.color }} />
+                  <span className="flex-1 truncate">{s.name}</span>
+                  <span className="font-semibold tabular-nums">{s.count}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Charts row 2 */}
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Card className="glow-soft">
+          <CardHeader><CardTitle className="text-base">Avg Respon per Agent (menit)</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={data?.agentStats || []} layout="vertical" margin={{ left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis type="number" fontSize={11} />
+                <YAxis type="category" dataKey="name" fontSize={11} width={90} />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="avgMin" name="Menit" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+            {!data?.agentStats?.length && <p className="text-center text-sm text-muted-foreground py-8">Belum ada data respon.</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="glow-soft">
+          <CardHeader><CardTitle className="text-base">Leads per Stage</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={data?.stageDist || []}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis dataKey="name" fontSize={10} angle={-20} textAnchor="end" height={60} interval={0} />
+                <YAxis fontSize={11} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="count" name="Jumlah" radius={[6, 6, 0, 0]}>
+                  {(data?.stageDist || []).map((s: any, i: number) => (
+                    <Cell key={i} fill={s.color || "hsl(var(--primary))"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
