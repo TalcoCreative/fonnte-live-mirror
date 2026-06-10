@@ -134,7 +134,7 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
         source: row[idx("source")] || null,
         notes: row[idx("notes")] || null,
         document_url: row[idx("document_url")] || null,
-        source: row[idx("source")] || null,
+        chief_complaint: null,
         chatbot_state: "done",
       } as any, { onConflict: "whatsapp_number" });
       if (error) failed++; else success++;
