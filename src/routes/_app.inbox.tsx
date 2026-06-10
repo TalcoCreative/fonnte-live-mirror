@@ -171,7 +171,18 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     });
     const json = await res.json();
     setSending(false);
-    if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); }
+    if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); return; }
+    // Log reply
+    if (user) {
+      await supabase.from("activity_logs").insert({
+        user_id: user.id, action: "reply_message",
+        entity_type: "conversation", entity_id: activeId,
+        metadata: {
+          contact_name: active?.contact?.full_name, whatsapp: active?.contact?.whatsapp_number,
+          length: content.length,
+        },
+      } as any);
+    }
   }
 
   async function logAction(action: string, metadata: Record<string, any> = {}) {
