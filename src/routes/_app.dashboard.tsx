@@ -1,12 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, MessageSquare, Clock, TrendingUp, Inbox as InboxIcon, Wallet } from "lucide-react";
+import { Users, MessageSquare, Clock, TrendingUp, Inbox as InboxIcon, Wallet, UserCheck, History } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Legend,
@@ -23,6 +25,7 @@ function Dashboard() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [data, setData] = useState<any>(null);
+  const [selectedAgent, setSelectedAgent] = useState<any>(null);
 
   const { startISO, endISO } = useMemo(() => {
     const end = new Date(); end.setHours(23, 59, 59, 999);
@@ -40,9 +43,9 @@ function Dashboard() {
 
   useEffect(() => {
     (async () => {
-      const [contacts, openConv, msgsList, profiles, respMsgs, stageLogs, allConvs] = await Promise.all([
-        supabase.from("contacts").select("id, estimated_revenue, stage_id, created_at, stages(name, color)"),
-        supabase.from("conversations").select("id, assigned_agent_id, last_message_at", { count: "exact" }).eq("status", "OPEN"),
+      const [contacts, openConv, msgsList, profiles, respMsgs, stageLogs, allConvs, assignLogs] = await Promise.all([
+        supabase.from("contacts").select("id, full_name, whatsapp_number, estimated_revenue, stage_id, created_at, stages(name, color)"),
+        supabase.from("conversations").select("id, contact_id, assigned_agent_id, last_message_at, last_message_preview", { count: "exact" }).eq("status", "OPEN"),
         supabase.from("messages").select("sent_at, direction")
           .gte("sent_at", startISO).lte("sent_at", endISO),
         supabase.from("profiles").select("id, full_name, email"),
@@ -54,6 +57,9 @@ function Dashboard() {
           .gte("created_at", startISO).lte("created_at", endISO)
           .order("created_at", { ascending: true }),
         supabase.from("conversations").select("id, contact_id, created_at"),
+        supabase.from("activity_logs").select("entity_id, metadata, created_at, user_id")
+          .eq("action", "assign_agent")
+          .gte("created_at", startISO).lte("created_at", endISO),
       ]);
 
       const byStage: Record<string, { name: string; color: string; count: number }> = {};
@@ -147,12 +153,62 @@ function Dashboard() {
       const myLeadIds = new Set((myConvs || []).map((c: any) => c.contact_id));
       const myLeadCount = (contacts.data || []).filter((c: any) => myLeadIds.has(c.id)).length;
 
+      // --- Per-agent: historical (assign_agent logs) vs current (open conversations) ---
+      const contactMap: Record<string, any> = {};
+      (contacts.data || []).forEach((c: any) => { contactMap[c.id] = c; });
+
+      const histAgg: Record<string, { id: string; assignCount: number; contactIds: Set<string> }> = {};
+      (assignLogs.data || []).forEach((l: any) => {
+        const m = l.metadata || {};
+        const toId = m.to_agent;
+        if (!toId) return;
+        histAgg[toId] = histAgg[toId] || { id: toId, assignCount: 0, contactIds: new Set() };
+        histAgg[toId].assignCount++;
+        const cid = convToContact[l.entity_id];
+        if (cid) histAgg[toId].contactIds.add(cid);
+      });
+
+      const currentAgg: Record<string, { id: string; convs: any[] }> = {};
+      (openConv.data || []).forEach((c: any) => {
+        if (!c.assigned_agent_id) return;
+        const id = c.assigned_agent_id;
+        currentAgg[id] = currentAgg[id] || { id, convs: [] };
+        const contact = contactMap[c.contact_id] || {};
+        currentAgg[id].convs.push({
+          conversation_id: c.id,
+          contact_id: c.contact_id,
+          full_name: contact.full_name,
+          whatsapp_number: contact.whatsapp_number,
+          stage: contact.stages?.name,
+          stage_color: contact.stages?.color,
+          last_message_at: c.last_message_at,
+          last_message_preview: c.last_message_preview,
+        });
+      });
+
+      const agentLeadStats = Object.values(profMap).map((p: any) => {
+        const h = histAgg[p.id];
+        const c = currentAgg[p.id];
+        return {
+          id: p.id,
+          name: p.full_name || p.email?.split("@")[0] || "Agent",
+          email: p.email,
+          historicalUnique: h ? h.contactIds.size : 0,
+          historicalTotal: h ? h.assignCount : 0,
+          currentCount: c ? c.convs.length : 0,
+          currentList: c ? c.convs : [],
+          historicalContactIds: h ? Array.from(h.contactIds) : [],
+        };
+      }).filter((a: any) => a.historicalTotal > 0 || a.currentCount > 0)
+        .sort((a: any, b: any) => b.currentCount - a.currentCount || b.historicalUnique - a.historicalUnique);
+
       setData({
         totalContacts: (contacts.data || []).length,
         openConv: openConv.count || 0,
         messagesRange: (msgsList.data || []).length,
         teamAvg, agentStats, stageDist, topStage, totalRevenue,
         myInbox, myLeads: myLeadCount, dailySeries, transitions,
+        agentLeadStats, contactMap,
       });
     })();
   }, [startISO, endISO, user?.id]);
@@ -348,7 +404,124 @@ function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Leads per Agent (Historical vs Current) */}
+      <Card className="glow-soft">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><UserCheck className="size-4" /> Leads per Agent</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            <b>Historis</b>: total lead unik yang pernah di-assign ke agent (rentang dipilih). <b>Saat ini</b>: lead aktif yang sedang dipegang agent. Klik baris untuk detail.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {(!data?.agentLeadStats || data.agentLeadStats.length === 0) ? (
+            <p className="text-center text-sm text-muted-foreground py-8">Belum ada data assignment.</p>
+          ) : (
+            <div className="grid lg:grid-cols-2 gap-4">
+              <ResponsiveContainer width="100%" height={Math.max(220, (data?.agentLeadStats?.length || 0) * 38)}>
+                <BarChart data={data?.agentLeadStats || []} layout="vertical" margin={{ left: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                  <XAxis type="number" fontSize={11} allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" fontSize={11} width={100} />
+                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="historicalUnique" name="Historis (unik)" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
+                  <Bar dataKey="currentCount" name="Sedang dipegang" fill="#10b981" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="border-b">
+                      <th className="text-left py-2">Agent</th>
+                      <th className="text-right">Historis (unik)</th>
+                      <th className="text-right">Total Assign</th>
+                      <th className="text-right">Saat ini</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.agentLeadStats.map((a: any) => (
+                      <tr key={a.id} className="border-b hover:bg-accent/40 cursor-pointer" onClick={() => setSelectedAgent(a)}>
+                        <td className="py-2 pr-2 font-medium">{a.name}</td>
+                        <td className="text-right tabular-nums">{a.historicalUnique}</td>
+                        <td className="text-right tabular-nums text-muted-foreground">{a.historicalTotal}</td>
+                        <td className="text-right tabular-nums"><Badge variant="secondary">{a.currentCount}</Badge></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AgentDetailDialog agent={selectedAgent} contactMap={data?.contactMap || {}} onClose={() => setSelectedAgent(null)} />
     </div>
+  );
+}
+
+function AgentDetailDialog({ agent, contactMap, onClose }: { agent: any; contactMap: Record<string, any>; onClose: () => void }) {
+  return (
+    <Dialog open={!!agent} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><UserCheck className="size-5" /> {agent?.name}</DialogTitle>
+        </DialogHeader>
+        {agent && (
+          <div className="space-y-5">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-lg border p-3"><div className="text-[11px] text-muted-foreground">Historis (unik)</div><div className="text-xl font-bold">{agent.historicalUnique}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-[11px] text-muted-foreground">Total Assign</div><div className="text-xl font-bold">{agent.historicalTotal}</div></div>
+              <div className="rounded-lg border p-3"><div className="text-[11px] text-muted-foreground">Sedang dipegang</div><div className="text-xl font-bold">{agent.currentCount}</div></div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><InboxIcon className="size-4" /> Lead aktif ({agent.currentList.length})</h4>
+              {agent.currentList.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Tidak ada lead aktif.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {agent.currentList.map((c: any) => (
+                    <Link key={c.conversation_id} to="/inbox" search={{ c: c.conversation_id } as any}
+                      className="flex items-center gap-2 p-2 rounded-md border hover:bg-accent/40 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{c.full_name || c.whatsapp_number || "—"}</div>
+                        <div className="text-muted-foreground truncate">{c.last_message_preview || "—"}</div>
+                      </div>
+                      {c.stage && <Badge style={{ background: c.stage_color, color: "#fff" }} className="text-[10px]">{c.stage}</Badge>}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><History className="size-4" /> Pernah di-assign ({agent.historicalContactIds.length})</h4>
+              {agent.historicalContactIds.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Belum ada riwayat.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {agent.historicalContactIds.map((cid: string) => {
+                    const c = contactMap[cid];
+                    if (!c) return null;
+                    return (
+                      <div key={cid} className="flex items-center gap-2 p-2 rounded-md border text-xs">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{c.full_name || c.whatsapp_number || "—"}</div>
+                          <div className="text-muted-foreground truncate">{c.whatsapp_number}</div>
+                        </div>
+                        {c.stages?.name && <Badge style={{ background: c.stages.color, color: "#fff" }} className="text-[10px]">{c.stages.name}</Badge>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
