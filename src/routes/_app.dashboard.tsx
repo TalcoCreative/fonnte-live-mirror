@@ -152,12 +152,62 @@ function Dashboard() {
       const myLeadIds = new Set((myConvs || []).map((c: any) => c.contact_id));
       const myLeadCount = (contacts.data || []).filter((c: any) => myLeadIds.has(c.id)).length;
 
+      // --- Per-agent: historical (assign_agent logs) vs current (open conversations) ---
+      const contactMap: Record<string, any> = {};
+      (contacts.data || []).forEach((c: any) => { contactMap[c.id] = c; });
+
+      const histAgg: Record<string, { id: string; assignCount: number; contactIds: Set<string> }> = {};
+      (assignLogs.data || []).forEach((l: any) => {
+        const m = l.metadata || {};
+        const toId = m.to_agent;
+        if (!toId) return;
+        histAgg[toId] = histAgg[toId] || { id: toId, assignCount: 0, contactIds: new Set() };
+        histAgg[toId].assignCount++;
+        const cid = convToContact[l.entity_id];
+        if (cid) histAgg[toId].contactIds.add(cid);
+      });
+
+      const currentAgg: Record<string, { id: string; convs: any[] }> = {};
+      (openConv.data || []).forEach((c: any) => {
+        if (!c.assigned_agent_id) return;
+        const id = c.assigned_agent_id;
+        currentAgg[id] = currentAgg[id] || { id, convs: [] };
+        const contact = contactMap[c.contact_id] || {};
+        currentAgg[id].convs.push({
+          conversation_id: c.id,
+          contact_id: c.contact_id,
+          full_name: contact.full_name,
+          whatsapp_number: contact.whatsapp_number,
+          stage: contact.stages?.name,
+          stage_color: contact.stages?.color,
+          last_message_at: c.last_message_at,
+          last_message_preview: c.last_message_preview,
+        });
+      });
+
+      const agentLeadStats = Object.values(profMap).map((p: any) => {
+        const h = histAgg[p.id];
+        const c = currentAgg[p.id];
+        return {
+          id: p.id,
+          name: p.full_name || p.email?.split("@")[0] || "Agent",
+          email: p.email,
+          historicalUnique: h ? h.contactIds.size : 0,
+          historicalTotal: h ? h.assignCount : 0,
+          currentCount: c ? c.convs.length : 0,
+          currentList: c ? c.convs : [],
+          historicalContactIds: h ? Array.from(h.contactIds) : [],
+        };
+      }).filter((a: any) => a.historicalTotal > 0 || a.currentCount > 0)
+        .sort((a: any, b: any) => b.currentCount - a.currentCount || b.historicalUnique - a.historicalUnique);
+
       setData({
         totalContacts: (contacts.data || []).length,
         openConv: openConv.count || 0,
         messagesRange: (msgsList.data || []).length,
         teamAvg, agentStats, stageDist, topStage, totalRevenue,
         myInbox, myLeads: myLeadCount, dailySeries, transitions,
+        agentLeadStats, contactMap,
       });
     })();
   }, [startISO, endISO, user?.id]);
