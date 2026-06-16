@@ -1,12 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, MessageSquare, Clock, TrendingUp, Inbox as InboxIcon, Wallet } from "lucide-react";
+import { Users, MessageSquare, Clock, TrendingUp, Inbox as InboxIcon, Wallet, UserCheck, History } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Legend,
