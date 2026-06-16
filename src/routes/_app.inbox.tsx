@@ -214,6 +214,16 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       from_name: agentName(prev), to_name: agentName(agentId),
     });
     toast.success(agentId ? `Ditugaskan ke ${agentName(agentId)}` : "Penugasan dihapus");
+    // Fire WhatsApp notification to the newly assigned agent (skip self & unassign)
+    if (agentId && agentId !== user?.id) {
+      supabase.functions.invoke("notify-agent-assign", {
+        body: { conversation_id: activeId, agent_id: agentId },
+      }).then((r: any) => {
+        if (r?.data?.ok === false && r?.data?.skipped) {
+          toast.message(`Notif WA dilewati: ${r.data.skipped}`);
+        }
+      }).catch(() => {});
+    }
     loadConversations();
   }
 
