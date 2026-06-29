@@ -189,7 +189,7 @@ Deno.serve(async (req) => {
   }
 });
 
-async function runWorkflow(admin: any, contact: any, message: string, convId: string, api_key: string | undefined, workflowId: string) {
+async function runWorkflow(admin: any, contact: any, message: string, convId: string, api_key: string | undefined, workflowId: string, deviceNum?: string) {
   const { data: wf } = await admin.from("workflows").select("id,status,is_enabled").eq("id", workflowId).maybeSingle();
   if (!wf || wf.status !== "published" || !wf.is_enabled) return;
   const { data: steps } = await admin.from("workflow_steps").select("*").eq("workflow_id", workflowId).order("position");
@@ -206,7 +206,7 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
     const cur = steps[idx];
     const result = await consumeAnswer(admin, cur, message);
     if (!result.ok) {
-      await sendReply(admin, contact, convId, result.error || "Mohon coba lagi.", api_key);
+      await sendReply(admin, contact, convId, result.error || "Mohon coba lagi.", api_key, deviceNum);
       return;
     }
     data[cur.id] = result.value;
@@ -232,13 +232,13 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
 
     if (step.type === "message") {
       const text = await renderPrompt(admin, step, data);
-      await sendReply(admin, contact, convId, text, api_key);
+      await sendReply(admin, contact, convId, text, api_key, deviceNum);
       idx++; continue;
     }
 
     if (step.type === "closing") {
       const text = await renderPrompt(admin, step, data);
-      await sendReply(admin, contact, convId, text, api_key);
+      await sendReply(admin, contact, convId, text, api_key, deviceNum);
       contactUpdates.chatbot_state = "done";
       contactUpdates.chatbot_data = data;
       await admin.from("contacts").update(contactUpdates).eq("id", contact.id);
@@ -246,7 +246,7 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
     }
 
     const prompt = await renderPrompt(admin, step, data);
-    await sendReply(admin, contact, convId, prompt, api_key);
+    await sendReply(admin, contact, convId, prompt, api_key, deviceNum);
     contactUpdates.chatbot_state = step.id;
     contactUpdates.chatbot_data = data;
     await admin.from("contacts").update(contactUpdates).eq("id", contact.id);
