@@ -165,14 +165,17 @@ export type Database = {
           chief_complaint: string | null
           created_at: string
           current_medications: string | null
+          description: string | null
           document_url: string | null
           domicile: string | null
+          email: string | null
           estimated_revenue: number | null
           full_name: string | null
           id: string
           initial_question: string | null
           interested_product_id: string | null
           last_interaction_at: string | null
+          need_category: string | null
           notes: string | null
           source: string
           stage_id: string | null
@@ -188,14 +191,17 @@ export type Database = {
           chief_complaint?: string | null
           created_at?: string
           current_medications?: string | null
+          description?: string | null
           document_url?: string | null
           domicile?: string | null
+          email?: string | null
           estimated_revenue?: number | null
           full_name?: string | null
           id?: string
           initial_question?: string | null
           interested_product_id?: string | null
           last_interaction_at?: string | null
+          need_category?: string | null
           notes?: string | null
           source?: string
           stage_id?: string | null
@@ -211,14 +217,17 @@ export type Database = {
           chief_complaint?: string | null
           created_at?: string
           current_medications?: string | null
+          description?: string | null
           document_url?: string | null
           domicile?: string | null
+          email?: string | null
           estimated_revenue?: number | null
           full_name?: string | null
           id?: string
           initial_question?: string | null
           interested_product_id?: string | null
           last_interaction_at?: string | null
+          need_category?: string | null
           notes?: string | null
           source?: string
           stage_id?: string | null
@@ -578,6 +587,103 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      workflow_steps: {
+        Row: {
+          config: Json
+          created_at: string
+          id: string
+          label: string | null
+          mapping: string | null
+          position: number
+          prompt: string | null
+          type: string
+          updated_at: string
+          workflow_id: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          id?: string
+          label?: string | null
+          mapping?: string | null
+          position?: number
+          prompt?: string | null
+          type: string
+          updated_at?: string
+          workflow_id: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          id?: string
+          label?: string | null
+          mapping?: string | null
+          position?: number
+          prompt?: string | null
+          type?: string
+          updated_at?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_steps_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflows: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_enabled: boolean
+          name: string
+          parent_id: string | null
+          published_at: string | null
+          status: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_enabled?: boolean
+          name: string
+          parent_id?: string | null
+          published_at?: string | null
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_enabled?: boolean
+          name?: string
+          parent_id?: string | null
+          published_at?: string | null
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflows_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "workflows"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
