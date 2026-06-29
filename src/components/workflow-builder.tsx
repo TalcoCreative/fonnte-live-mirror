@@ -235,7 +235,7 @@ function WorkflowEditor({ workflow, onBack }: { workflow: Workflow; onBack: () =
             <CardTitle className="flex-1">Editor Workflow</CardTitle>
             <Badge variant="outline" className="text-xs">v{wf.version}</Badge>
             {wf.status === "draft" && <Badge className="bg-amber-500/15 text-amber-600 text-xs">Draft</Badge>}
-            {wf.status === "published" && <Badge className="bg-emerald-500/15 text-emerald-600 text-xs">Published — read only</Badge>}
+            {wf.status === "published" && <Badge className="bg-emerald-500/15 text-emerald-600 text-xs">Published — perubahan langsung live</Badge>}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
