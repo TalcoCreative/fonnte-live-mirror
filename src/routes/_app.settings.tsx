@@ -22,6 +22,7 @@ function SettingsPage() {
   const [tab, setTab] = useState("gateway");
   const tabs = [
     { v: "gateway", label: "WhatsApp Gateway" },
+    { v: "workflow", label: "Workflow" },
     { v: "quick", label: "Quick Replies" },
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
@@ -49,12 +50,14 @@ function SettingsPage() {
 
       <div>
         {tab === "gateway" && <FonnteTab />}
+        {tab === "workflow" && <WorkflowTab />}
         {tab === "quick" && <QuickRepliesTab />}
         {tab === "products" && <ProductsTab />}
         {tab === "team" && <TeamTab />}
         {tab === "ops" && <OpsTab />}
         {tab === "webhook" && <WebhookTab />}
       </div>
+
     </div>
   );
 }
@@ -700,3 +703,117 @@ function OpsTab() {
     </div>
   );
 }
+
+function WorkflowTab() {
+  const [stages, setStages] = useState<any[]>([]);
+  const [newName, setNewName] = useState("");
+  const [newColor, setNewColor] = useState("#3b82f6");
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  async function load() {
+    const [{ data: st }, { data: cs }] = await Promise.all([
+      supabase.from("stages").select("*").order("order_index"),
+      supabase.from("contacts").select("stage_id"),
+    ]);
+    setStages(st || []);
+    const c: Record<string, number> = {};
+    (cs || []).forEach((r: any) => { if (r.stage_id) c[r.stage_id] = (c[r.stage_id] || 0) + 1; });
+    setCounts(c);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function update(id: string, patch: any) {
+    const { error } = await supabase.from("stages").update(patch).eq("id", id);
+    if (error) toast.error(error.message); else load();
+  }
+
+  async function move(id: string, dir: -1 | 1) {
+    const i = stages.findIndex((s) => s.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= stages.length) return;
+    const a = stages[i], b = stages[j];
+    await Promise.all([
+      supabase.from("stages").update({ order_index: b.order_index }).eq("id", a.id),
+      supabase.from("stages").update({ order_index: a.order_index }).eq("id", b.id),
+    ]);
+    load();
+  }
+
+  async function add() {
+    if (!newName.trim()) return toast.error("Nama stage wajib diisi");
+    const nextIdx = (stages[stages.length - 1]?.order_index || 0) + 1;
+    const { error } = await supabase.from("stages").insert({
+      name: newName.trim(), color: newColor, order_index: nextIdx, is_default: false, is_terminal: false,
+    });
+    if (error) toast.error(error.message);
+    else { setNewName(""); toast.success("Stage ditambahkan"); load(); }
+  }
+
+  async function remove(s: any) {
+    if (counts[s.id]) return toast.error(`Tidak bisa dihapus: ${counts[s.id]} lead masih di stage ini.`);
+    if (s.is_default) return toast.error("Stage default tidak dapat dihapus.");
+    if (!confirm(`Hapus stage "${s.name}"?`)) return;
+    const { error } = await supabase.from("stages").delete().eq("id", s.id);
+    if (error) toast.error(error.message); else { toast.success("Stage dihapus"); load(); }
+  }
+
+  async function setDefault(id: string) {
+    await supabase.from("stages").update({ is_default: false }).neq("id", "00000000-0000-0000-0000-000000000000");
+    await supabase.from("stages").update({ is_default: true }).eq("id", id);
+    toast.success("Default stage diperbarui");
+    load();
+  }
+
+  return (
+    <div className="space-y-4 mt-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Workflow Builder</CardTitle>
+          <CardDescription>
+            Atur stage pipeline: ubah nama, warna, urutan, tandai sebagai default (stage awal saat lead masuk) atau terminal (akhir).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-end gap-2 p-3 rounded-xl border bg-muted/30">
+            <div className="flex-1 min-w-[200px] space-y-1.5">
+              <Label className="text-xs">Nama stage baru</Label>
+              <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="cth: Negosiasi" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Warna</Label>
+              <Input type="color" value={newColor} onChange={(e) => setNewColor(e.target.value)} className="w-16 h-10 p-1" />
+            </div>
+            <Button onClick={add}>Tambah Stage</Button>
+          </div>
+
+          <div className="space-y-2">
+            {stages.map((s, i) => (
+              <div key={s.id} className="flex flex-wrap items-center gap-2 p-3 rounded-xl border bg-card">
+                <span className="size-8 grid place-items-center rounded-lg bg-muted text-xs font-mono">{i + 1}</span>
+                <Input type="color" value={s.color} onChange={(e) => update(s.id, { color: e.target.value })} className="w-12 h-9 p-1" />
+                <Input value={s.name} onChange={(e) => setStages(stages.map((x) => x.id === s.id ? { ...x, name: e.target.value } : x))}
+                  onBlur={() => update(s.id, { name: s.name })} className="flex-1 min-w-[160px]" />
+                <Badge variant="outline" className="text-xs">{counts[s.id] || 0} lead</Badge>
+                {s.is_default && <Badge className="bg-blue-500/15 text-blue-500 text-xs">Default</Badge>}
+                {s.is_terminal && <Badge className="bg-emerald-500/15 text-emerald-500 text-xs">Terminal</Badge>}
+                <div className="flex gap-1 ml-auto">
+                  <Button size="sm" variant="ghost" disabled={i === 0} onClick={() => move(s.id, -1)}>↑</Button>
+                  <Button size="sm" variant="ghost" disabled={i === stages.length - 1} onClick={() => move(s.id, 1)}>↓</Button>
+                  {!s.is_default && (
+                    <Button size="sm" variant="outline" onClick={() => setDefault(s.id)}>Set Default</Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => update(s.id, { is_terminal: !s.is_terminal })}>
+                    {s.is_terminal ? "Unset Terminal" : "Set Terminal"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove(s)}>Hapus</Button>
+                </div>
+              </div>
+            ))}
+            {!stages.length && <p className="text-sm text-muted-foreground">Belum ada stage.</p>}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
