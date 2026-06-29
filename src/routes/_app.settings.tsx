@@ -25,6 +25,7 @@ function SettingsPage() {
     { v: "quick", label: "Quick Replies" },
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
+    { v: "ops", label: "Shift & SLA" },
     { v: "webhook", label: "Webhook" },
   ];
   return (
@@ -51,6 +52,7 @@ function SettingsPage() {
         {tab === "quick" && <QuickRepliesTab />}
         {tab === "products" && <ProductsTab />}
         {tab === "team" && <TeamTab />}
+        {tab === "ops" && <OpsTab />}
         {tab === "webhook" && <WebhookTab />}
       </div>
     </div>
@@ -461,6 +463,7 @@ function TeamTab() {
               <select value={role} onChange={(e) => setRole(e.target.value)}
                 className="w-full h-10 px-3 rounded-md border bg-background text-sm">
                 <option value="agent">Agent</option>
+                <option value="first_response">First Response Agent</option>
                 <option value="admin">Admin</option>
                 <option value="super_admin">Super Admin</option>
               </select>
@@ -531,6 +534,167 @@ function TeamTab() {
               {!rows.length && <p className="p-3 text-sm text-muted-foreground">Belum ada anggota tim.</p>}
             </div>
           )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+type Shift = { id: string; name: string; start_time: string; end_time: string; days_of_week: number[] | null; is_active: boolean };
+const DAY_LABELS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+
+function OpsTab() {
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [name, setName] = useState("");
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("16:00");
+  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [slaGreen, setSlaGreen] = useState("5");
+  const [slaYellow, setSlaYellow] = useState("10");
+  const [busy, setBusy] = useState(false);
+
+  async function loadAll() {
+    const [{ data: s }, { data: sg }, { data: sy }] = await Promise.all([
+      supabase.from("shifts").select("*").order("start_time"),
+      supabase.from("system_settings").select("value").eq("key", "sla_green_minutes").maybeSingle(),
+      supabase.from("system_settings").select("value").eq("key", "sla_yellow_minutes").maybeSingle(),
+    ]);
+    setShifts((s as any) || []);
+    if (sg?.value) setSlaGreen(String(sg.value).replace(/"/g, ""));
+    if (sy?.value) setSlaYellow(String(sy.value).replace(/"/g, ""));
+  }
+  useEffect(() => { loadAll(); }, []);
+
+  function toggleDay(d: number) {
+    setDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
+  }
+
+  async function addShift() {
+    if (!name.trim()) return toast.error("Nama shift wajib");
+    setBusy(true);
+    const { error } = await supabase.from("shifts").insert({
+      name, start_time: startTime + ":00", end_time: endTime + ":00",
+      days_of_week: days, is_active: true,
+    });
+    setBusy(false);
+    if (error) toast.error(error.message);
+    else { toast.success("Shift ditambahkan"); setName(""); loadAll(); }
+  }
+
+  async function toggleShift(id: string, active: boolean) {
+    const { error } = await supabase.from("shifts").update({ is_active: active }).eq("id", id);
+    if (error) toast.error(error.message); else loadAll();
+  }
+
+  async function removeShift(id: string, name: string) {
+    if (!confirm(`Hapus shift "${name}"?`)) return;
+    const { error } = await supabase.from("shifts").delete().eq("id", id);
+    if (error) toast.error(error.message); else { toast.success("Shift dihapus"); loadAll(); }
+  }
+
+  async function saveSla() {
+    const g = parseInt(slaGreen, 10);
+    const y = parseInt(slaYellow, 10);
+    if (!Number.isFinite(g) || !Number.isFinite(y) || g <= 0 || y <= g) {
+      return toast.error("SLA tidak valid. Kuning harus > Hijau.");
+    }
+    setBusy(true);
+    const { error } = await supabase.from("system_settings").upsert([
+      { key: "sla_green_minutes", value: String(g) },
+      { key: "sla_yellow_minutes", value: String(y) },
+    ], { onConflict: "key" });
+    setBusy(false);
+    if (error) toast.error(error.message); else toast.success("Ambang SLA disimpan");
+  }
+
+  return (
+    <div className="space-y-4 mt-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Ambang SLA Inbox</CardTitle>
+          <CardDescription>
+            Indikator warna untuk percakapan belum dibaca: <span className="text-emerald-600 font-medium">Hijau</span> kurang dari ambang,
+            {" "}<span className="text-amber-600 font-medium">Kuning</span> di antara ambang, <span className="text-rose-600 font-medium">Merah</span> melewati ambang kuning.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div className="space-y-1.5">
+            <Label>Hijau &lt; (menit)</Label>
+            <Input type="number" min={1} value={slaGreen} onChange={(e) => setSlaGreen(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Kuning &lt; (menit)</Label>
+            <Input type="number" min={2} value={slaYellow} onChange={(e) => setSlaYellow(e.target.value)} />
+          </div>
+          <Button onClick={saveSla} disabled={busy}>
+            {busy && <Loader2 className="size-4 mr-2 animate-spin" />}Simpan SLA
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tambah Shift</CardTitle>
+          <CardDescription>Atur jam kerja & hari aktif setiap shift.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="space-y-1.5 md:col-span-2">
+              <Label>Nama Shift</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="cth: Pagi" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Mulai</Label>
+              <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Selesai</Label>
+              <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Hari Aktif</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {DAY_LABELS.map((d, i) => (
+                <button key={i} type="button" onClick={() => toggleDay(i)}
+                  className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
+                    days.includes(i) ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent"
+                  }`}>{d}</button>
+              ))}
+            </div>
+          </div>
+          <Button onClick={addShift} disabled={busy}>Tambah Shift</Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Daftar Shift ({shifts.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="border rounded-md divide-y">
+            {shifts.map((s) => (
+              <div key={s.id} className="p-3 flex items-center justify-between gap-3 flex-wrap">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-sm flex items-center gap-2">
+                    {s.name}
+                    {!s.is_active && <Badge variant="outline" className="text-[10px]">Nonaktif</Badge>}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}
+                    {" · "}
+                    {(s.days_of_week || []).map((d) => DAY_LABELS[d]).join(", ") || "Setiap hari"}
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => toggleShift(s.id, !s.is_active)}>
+                  {s.is_active ? "Nonaktifkan" : "Aktifkan"}
+                </Button>
+                <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10"
+                  onClick={() => removeShift(s.id, s.name)}>Hapus</Button>
+              </div>
+            ))}
+            {!shifts.length && <p className="p-3 text-sm text-muted-foreground">Belum ada shift.</p>}
+          </div>
         </CardContent>
       </Card>
     </div>
