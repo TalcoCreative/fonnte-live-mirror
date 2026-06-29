@@ -616,7 +616,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                   const out = m.direction === "OUTBOUND";
                   const isMirror = out && !m.sent_by_id; // sent from WA device, not from inbox
                   const senderLabel = out
-                    ? (isMirror ? "WhatsApp (HP)" : agentName(m.sent_by_id))
+                    ? (isMirror ? (deviceLabel || "WA Device") : agentName(m.sent_by_id))
                     : (active.contact?.full_name || "Pelanggan");
                   return (
                     <div key={m.id} className={cn("flex flex-col gap-0.5", out ? "items-end" : "items-start")}>
