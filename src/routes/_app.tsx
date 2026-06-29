@@ -17,11 +17,13 @@ export const Route = createFileRoute("/_app")({
 type NavItem = { to: string; label: string; icon: any; crucial: boolean; roles?: AppRole[] };
 const ALL_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, crucial: false, roles: ["super_admin", "admin", "agent", "first_response"] },
+  { to: "/first-response", label: "FR Board", icon: Zap, crucial: false, roles: ["super_admin", "admin", "first_response"] },
   { to: "/inbox", label: "Inbox", icon: MessageSquare, crucial: true },
   { to: "/my-inbox", label: "My Inbox", icon: Inbox, crucial: false },
   { to: "/leads", label: "Leads", icon: Users, crucial: true, roles: ["super_admin", "admin", "agent"] },
   { to: "/my-leads", label: "My Leads", icon: UserCircle2, crucial: false, roles: ["super_admin", "admin", "agent"] },
   { to: "/broadcast", label: "Broadcast", icon: Send, crucial: false, roles: ["super_admin", "admin", "agent"] },
+  { to: "/performance", label: "Performance", icon: Trophy, crucial: false, roles: ["super_admin", "admin"] },
   { to: "/activity", label: "Log", icon: Activity, crucial: false, roles: ["super_admin", "admin"] },
   { to: "/settings", label: "Settings", icon: Settings, crucial: false, roles: ["super_admin", "admin"] },
 ];
