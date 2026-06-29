@@ -1,0 +1,1 @@
+ALTER TABLE public.shifts ADD COLUMN IF NOT EXISTS days_of_week integer[] NOT NULL DEFAULT ARRAY[1,2,3,4,5];
