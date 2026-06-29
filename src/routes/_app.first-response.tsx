@@ -306,6 +306,3 @@ function KPI({ icon: Icon, label, value, color }: any) {
     </Card>
   );
 }
-
-// Avoid unused import on Cell since BarChart needs it
-import { Cell } from "recharts";
