@@ -42,12 +42,14 @@ Deno.serve(async (req) => {
       admin.from("profiles").select("id, full_name, email, phone").eq("id", agent_id).maybeSingle(),
       admin.from("profiles").select("full_name, email").eq("id", assigner.id).maybeSingle(),
       admin.from("conversations").select("id, contact:contacts(full_name, whatsapp_number, chief_complaint, interested_product_id, product:products!contacts_interested_product_id_fkey(name))").eq("id", conversation_id).maybeSingle(),
-      admin.from("system_settings").select("key,value").in("key", ["fonnte_api_key"]),
+      admin.from("system_settings").select("key,value").in("key", ["fonnte_api_key", "fonnte_device"]),
     ]);
 
     if (!agent?.phone) return json({ ok: false, skipped: "agent has no phone" });
     const api_key = settings?.find((s: any) => s.key === "fonnte_api_key")?.value;
+    const deviceNum = settings?.find((s: any) => s.key === "fonnte_device")?.value;
     if (!api_key) return json({ ok: false, skipped: "no api key" });
+
 
     const c: any = conv?.contact || {};
     const productName = c.product?.name || "—";
