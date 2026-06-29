@@ -53,6 +53,38 @@ export type Database = {
         }
         Relationships: []
       }
+      agent_shifts: {
+        Row: {
+          agent_id: string
+          created_at: string
+          effective_from: string
+          id: string
+          shift_id: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          effective_from?: string
+          id?: string
+          shift_id: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          effective_from?: string
+          id?: string
+          shift_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_shifts_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_events: {
         Row: {
           actor_id: string | null
