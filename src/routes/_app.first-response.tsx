@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Zap, Timer, MessageCircle, UserCheck, AlertTriangle } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  AreaChart, Area, CartesianGrid, Legend,
+  AreaChart, Area, CartesianGrid, Legend, Cell,
 } from "recharts";
 
 export const Route = createFileRoute("/_app/first-response")({

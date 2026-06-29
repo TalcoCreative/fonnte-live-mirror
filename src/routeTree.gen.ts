@@ -17,6 +17,7 @@ import { Route as AppMyLeadsRouteImport } from './routes/_app.my-leads'
 import { Route as AppMyInboxRouteImport } from './routes/_app.my-inbox'
 import { Route as AppLeadsRouteImport } from './routes/_app.leads'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
+import { Route as AppFirstResponseRouteImport } from './routes/_app.first-response'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppBroadcastRouteImport } from './routes/_app.broadcast'
 import { Route as AppActivityRouteImport } from './routes/_app.activity'
@@ -60,6 +61,11 @@ const AppInboxRoute = AppInboxRouteImport.update({
   path: '/inbox',
   getParentRoute: () => AppRoute,
 } as any)
+const AppFirstResponseRoute = AppFirstResponseRouteImport.update({
+  id: '/first-response',
+  path: '/first-response',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/activity': typeof AppActivityRoute
   '/broadcast': typeof AppBroadcastRoute
   '/dashboard': typeof AppDashboardRoute
+  '/first-response': typeof AppFirstResponseRoute
   '/inbox': typeof AppInboxRoute
   '/leads': typeof AppLeadsRoute
   '/my-inbox': typeof AppMyInboxRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/activity': typeof AppActivityRoute
   '/broadcast': typeof AppBroadcastRoute
   '/dashboard': typeof AppDashboardRoute
+  '/first-response': typeof AppFirstResponseRoute
   '/inbox': typeof AppInboxRoute
   '/leads': typeof AppLeadsRoute
   '/my-inbox': typeof AppMyInboxRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/_app/activity': typeof AppActivityRoute
   '/_app/broadcast': typeof AppBroadcastRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/first-response': typeof AppFirstResponseRoute
   '/_app/inbox': typeof AppInboxRoute
   '/_app/leads': typeof AppLeadsRoute
   '/_app/my-inbox': typeof AppMyInboxRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/broadcast'
     | '/dashboard'
+    | '/first-response'
     | '/inbox'
     | '/leads'
     | '/my-inbox'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
     | '/activity'
     | '/broadcast'
     | '/dashboard'
+    | '/first-response'
     | '/inbox'
     | '/leads'
     | '/my-inbox'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
     | '/_app/activity'
     | '/_app/broadcast'
     | '/_app/dashboard'
+    | '/_app/first-response'
     | '/_app/inbox'
     | '/_app/leads'
     | '/_app/my-inbox'
@@ -218,6 +230,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppInboxRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/first-response': {
+      id: '/_app/first-response'
+      path: '/first-response'
+      fullPath: '/first-response'
+      preLoaderRoute: typeof AppFirstResponseRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/dashboard': {
       id: '/_app/dashboard'
       path: '/dashboard'
@@ -246,6 +265,7 @@ interface AppRouteChildren {
   AppActivityRoute: typeof AppActivityRoute
   AppBroadcastRoute: typeof AppBroadcastRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppFirstResponseRoute: typeof AppFirstResponseRoute
   AppInboxRoute: typeof AppInboxRoute
   AppLeadsRoute: typeof AppLeadsRoute
   AppMyInboxRoute: typeof AppMyInboxRoute
@@ -257,6 +277,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppActivityRoute: AppActivityRoute,
   AppBroadcastRoute: AppBroadcastRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppFirstResponseRoute: AppFirstResponseRoute,
   AppInboxRoute: AppInboxRoute,
   AppLeadsRoute: AppLeadsRoute,
   AppMyInboxRoute: AppMyInboxRoute,
