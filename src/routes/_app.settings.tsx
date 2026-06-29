@@ -600,8 +600,8 @@ function OpsTab() {
     }
     setBusy(true);
     const { error } = await supabase.from("system_settings").upsert([
-      { key: "sla_green_minutes", value: g },
-      { key: "sla_yellow_minutes", value: y },
+      { key: "sla_green_minutes", value: String(g) },
+      { key: "sla_yellow_minutes", value: String(y) },
     ], { onConflict: "key" });
     setBusy(false);
     if (error) toast.error(error.message); else toast.success("Ambang SLA disimpan");
