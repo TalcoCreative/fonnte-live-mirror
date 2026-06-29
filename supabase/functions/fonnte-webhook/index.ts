@@ -1,4 +1,4 @@
-// Public webhook receiver for Fonnte incoming messages — runs Dynamic Workflow
+// Public webhook receiver for Fonnte incoming messages — runs Dynamic Workflow + mirrors device-sent outbound
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -12,6 +12,13 @@ function normalizePhone(p: string): string {
   if (n.startsWith("0")) n = "62" + n.slice(1);
   if (!n.startsWith("62")) n = "62" + n;
   return n;
+}
+
+function detectMediaType(url: string, ext?: string): "IMAGE" | "DOCUMENT" | "AUDIO" {
+  const e = (ext || url.split(".").pop() || "").toLowerCase();
+  if (/^(jpg|jpeg|png|gif|webp|bmp)$/.test(e)) return "IMAGE";
+  if (/^(mp3|ogg|wav|m4a|opus|aac)$/.test(e)) return "AUDIO";
+  return "DOCUMENT";
 }
 
 Deno.serve(async (req) => {
@@ -42,32 +49,34 @@ Deno.serve(async (req) => {
     const waName = (payload.name || payload.pushname || payload.sender_name || "").toString().trim() || null;
     const fonnteMsgId = payload.id || payload.message_id || null;
     const deviceField = payload.device || payload.device_number || null;
+    const mediaUrl = (payload.url || payload.file || payload.media || "").toString().trim() || null;
+    const mediaExt = (payload.extension || payload.filename || "").toString();
+    const fromMe = payload.fromMe === true || payload.fromMe === "true" || payload.from_me === true || payload.fromme === true;
 
     if (!sender) return json({ ok: false, error: "no sender" }, 400);
-    if (!rawMessage && (payload.state || payload.status)) return json({ ok: true, skip: "status-callback" });
-    if (payload.fromMe === true || payload.fromMe === "true" || payload.from_me === true || payload.fromme === true) return json({ ok: true, skip: "fromMe" });
-    if (hasWatermark) return json({ ok: true, skip: "watermark-echo" });
+    if (!rawMessage && !mediaUrl && (payload.state || payload.status)) return json({ ok: true, skip: "status-callback" });
 
-    const phone = normalizePhone(sender);
+    // For fromMe (device-sent outbound), `sender` is OUR device; the recipient is in payload.target/to/receiver.
+    const target = (payload.target || payload.to || payload.receiver || payload.recipient || "").toString();
+    const contactNumber = fromMe ? normalizePhone(target) : normalizePhone(sender);
+
+    if (!contactNumber || contactNumber.length < 6) return json({ ok: true, skip: "no-contact-number" });
 
     const { data: settingsRows } = await admin.from("system_settings").select("key,value")
       .in("key", ["fonnte_device", "fonnte_api_key", "active_workflow_id"]);
     const settings: Record<string, string> = {};
     (settingsRows || []).forEach((r: any) => { settings[r.key] = r.value; });
-    const deviceNumber = settings.fonnte_device ? normalizePhone(settings.fonnte_device) : null;
-    if (deviceNumber && phone === deviceNumber) return json({ ok: true, skip: "self-device" });
-    if (deviceField && normalizePhone(String(deviceField)) === phone) return json({ ok: true, skip: "device-equals-sender" });
 
-    let { data: contact } = await admin.from("contacts").select("*").eq("whatsapp_number", phone).maybeSingle();
-
+    // Find/create contact based on the customer's number (not the device)
+    let { data: contact } = await admin.from("contacts").select("*").eq("whatsapp_number", contactNumber).maybeSingle();
     if (!contact) {
       const { data: defaultStage } = await admin.from("stages").select("id").eq("is_default", true).maybeSingle();
       const { data: newC } = await admin.from("contacts").insert({
-        whatsapp_number: phone, full_name: waName, stage_id: defaultStage?.id || null,
+        whatsapp_number: contactNumber, full_name: fromMe ? null : waName, stage_id: defaultStage?.id || null,
         source: "whatsapp", last_interaction_at: new Date().toISOString(), total_messages: 0,
       }).select().single();
       contact = newC!;
-    } else if (!contact.full_name && waName) {
+    } else if (!fromMe && !contact.full_name && waName) {
       await admin.from("contacts").update({ full_name: waName }).eq("id", contact.id);
       contact.full_name = waName;
     }
@@ -75,29 +84,74 @@ Deno.serve(async (req) => {
     let { data: conv } = await admin.from("conversations").select("*").eq("contact_id", contact.id).eq("status", "OPEN").order("created_at", { ascending: false }).maybeSingle();
     if (!conv) {
       const { data: newConv } = await admin.from("conversations").insert({
-        contact_id: contact.id, status: "OPEN", first_inbound_at: new Date().toISOString(),
+        contact_id: contact.id, status: "OPEN",
+        first_inbound_at: fromMe ? null : new Date().toISOString(),
       }).select().single();
       conv = newConv!;
     }
 
+    // Duplicate guard by fonnte id
     if (fonnteMsgId) {
       const { data: dup } = await admin.from("messages").select("id").eq("fonnte_message_id", String(fonnteMsgId)).limit(1).maybeSingle();
       if (dup) return json({ ok: true, skip: "duplicate-id" });
     }
 
-    const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
-    const { data: echoMatch } = await admin.from("messages").select("id")
-      .eq("conversation_id", conv.id).eq("direction", "OUTBOUND")
-      .eq("content", message).gte("sent_at", fiveMinAgo).limit(1).maybeSingle();
-    if (echoMatch) return json({ ok: true, skip: "echo-content" });
+    // ===== Outbound device mirror (fromMe = true) =====
+    if (fromMe) {
+      // Echo guard: ignore messages we already saved (sent from inbox)
+      if (hasWatermark) return json({ ok: true, skip: "watermark-echo" });
+      const twoMinAgo = new Date(Date.now() - 2 * 60_000).toISOString();
+      const { data: echoMatch } = await admin.from("messages").select("id")
+        .eq("conversation_id", conv.id).eq("direction", "OUTBOUND")
+        .eq("content", message).gte("sent_at", twoMinAgo).limit(1).maybeSingle();
+      if (echoMatch) return json({ ok: true, skip: "echo-content" });
 
-    const insert: any = { conversation_id: conv.id, direction: "INBOUND", type: "TEXT", content: message, status: "DELIVERED" };
+      const msgType = mediaUrl ? detectMediaType(mediaUrl, mediaExt) : "TEXT";
+      const insert: any = {
+        conversation_id: conv.id, direction: "OUTBOUND", type: msgType,
+        content: message || (mediaUrl ? "(attachment)" : ""),
+        status: "DELIVERED", sent_by_id: null, // null = sent from WhatsApp device, not from inbox
+        media_url: mediaUrl,
+      };
+      if (fonnteMsgId) insert.fonnte_message_id = String(fonnteMsgId);
+      await admin.from("messages").insert(insert);
+
+      await admin.from("conversations").update({
+        last_message_at: new Date().toISOString(),
+        last_message_preview: (message || "(attachment)").slice(0, 100),
+      }).eq("id", conv.id);
+
+      return json({ ok: true, mirrored: "device-outbound" });
+    }
+
+    // Watermark check only applies to inbound text (filter our own outbound bounce-backs)
+    if (hasWatermark) return json({ ok: true, skip: "watermark-echo" });
+
+    const deviceNumber = settings.fonnte_device ? normalizePhone(settings.fonnte_device) : null;
+    if (deviceNumber && contactNumber === deviceNumber) return json({ ok: true, skip: "self-device" });
+    if (deviceField && normalizePhone(String(deviceField)) === contactNumber) return json({ ok: true, skip: "device-equals-sender" });
+
+    // Echo content guard for inbound (rare but possible)
+    const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    if (message) {
+      const { data: echoMatch } = await admin.from("messages").select("id")
+        .eq("conversation_id", conv.id).eq("direction", "OUTBOUND")
+        .eq("content", message).gte("sent_at", fiveMinAgo).limit(1).maybeSingle();
+      if (echoMatch) return json({ ok: true, skip: "echo-content" });
+    }
+
+    const msgType = mediaUrl ? detectMediaType(mediaUrl, mediaExt) : "TEXT";
+    const insert: any = {
+      conversation_id: conv.id, direction: "INBOUND", type: msgType,
+      content: message || (mediaUrl ? "(attachment)" : ""),
+      status: "DELIVERED", media_url: mediaUrl,
+    };
     if (fonnteMsgId) insert.fonnte_message_id = String(fonnteMsgId);
     await admin.from("messages").insert(insert);
 
     await admin.from("conversations").update({
       last_message_at: new Date().toISOString(),
-      last_message_preview: message.slice(0, 100),
+      last_message_preview: (message || "(attachment)").slice(0, 100),
       unread_count: (conv.unread_count || 0) + 1,
       first_inbound_at: conv.first_inbound_at || new Date().toISOString(),
     }).eq("id", conv.id);
@@ -107,7 +161,7 @@ Deno.serve(async (req) => {
       total_messages: (contact.total_messages || 0) + 1,
     }).eq("id", contact.id);
 
-    if (contact.chatbot_state !== "done" && settings.active_workflow_id) {
+    if (contact.chatbot_state !== "done" && settings.active_workflow_id && message) {
       await runWorkflow(admin, contact, message, conv.id, settings.fonnte_api_key, settings.active_workflow_id);
     }
 
@@ -128,11 +182,9 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
   const data = (contact.chatbot_data as any) || {};
   const contactUpdates: any = {};
 
-  // Find current step (the one we asked previously and now expect an answer for)
   const findIndex = (id: string | null) => id ? steps.findIndex((s: any) => s.id === id) : -1;
   let idx = findIndex(state);
 
-  // If user has active interactive step, validate and store the incoming message first
   if (idx >= 0) {
     const cur = steps[idx];
     const result = await consumeAnswer(admin, cur, message);
@@ -142,12 +194,11 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
     }
     data[cur.id] = result.value;
     if (cur.mapping) applyMapping(contactUpdates, cur.mapping, result.value);
-    idx = idx + 1; // move past current
+    idx = idx + 1;
   } else {
-    idx = 0; // start from beginning
+    idx = 0;
   }
 
-  // Execute auto-steps (messages) until we hit an interactive step or end
   while (idx < steps.length) {
     const step = steps[idx];
 
@@ -177,7 +228,6 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
       return;
     }
 
-    // Interactive step — send prompt and wait
     const prompt = await renderPrompt(admin, step, data);
     await sendReply(admin, contact, convId, prompt, api_key);
     contactUpdates.chatbot_state = step.id;
@@ -186,7 +236,6 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
     return;
   }
 
-  // End of flow with no explicit closing
   contactUpdates.chatbot_state = "done";
   contactUpdates.chatbot_data = data;
   await admin.from("contacts").update(contactUpdates).eq("id", contact.id);
@@ -227,7 +276,7 @@ async function consumeAnswer(admin: any, step: any, message: string): Promise<{ 
     case "textarea":
       return { ok: true, value: msg };
     case "email":
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg)) return { ok: false, error: "Format email tidak valid. Mohon kirim ulang." };
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg)) return { ok: false, error: "Format email tidak valid." };
       return { ok: true, value: msg.toLowerCase() };
     case "phone":
       if (!/^[+\d][\d\s\-]{6,}$/.test(msg)) return { ok: false, error: "Nomor telepon tidak valid." };
@@ -238,10 +287,10 @@ async function consumeAnswer(admin: any, step: any, message: string): Promise<{ 
       return { ok: true, value: n };
     }
     case "date":
-      if (!/\d{1,4}[\/\-]\d{1,2}([\/\-]\d{1,4})?/.test(msg)) return { ok: false, error: "Format tanggal tidak dikenali (contoh: 25/12/2025)." };
+      if (!/\d{1,4}[\/\-]\d{1,2}([\/\-]\d{1,4})?/.test(msg)) return { ok: false, error: "Format tanggal tidak dikenali." };
       return { ok: true, value: msg };
     case "file":
-      return { ok: true, value: msg }; // accept any text/url
+      return { ok: true, value: msg };
     case "dropdown":
     case "radio": {
       let options: { id?: string; name: string }[] = [];

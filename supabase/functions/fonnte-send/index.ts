@@ -1,4 +1,4 @@
-// Send WhatsApp message via Fonnte and store as OUTBOUND message
+// Send WhatsApp message via Fonnte and store as OUTBOUND message (text or attachment)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -6,6 +6,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+
+function detectMediaType(url: string): "IMAGE" | "DOCUMENT" | "AUDIO" {
+  const e = (url.split("?")[0].split(".").pop() || "").toLowerCase();
+  if (/^(jpg|jpeg|png|gif|webp|bmp)$/.test(e)) return "IMAGE";
+  if (/^(mp3|ogg|wav|m4a|opus|aac)$/.test(e)) return "AUDIO";
+  return "DOCUMENT";
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -15,7 +22,6 @@ Deno.serve(async (req) => {
   const PUBLISHABLE = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY")!;
 
   try {
-    // Authenticate caller
     const authHeader = req.headers.get("Authorization") || "";
     const token = authHeader.replace("Bearer ", "");
     if (!token) return json({ error: "Unauthorized" }, 401);
@@ -30,19 +36,21 @@ Deno.serve(async (req) => {
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
     const body = await req.json();
-    const { conversation_id, content, target, is_test } = body as {
-      conversation_id?: string; content: string; target?: string; is_test?: boolean;
+    const {
+      conversation_id, content, target, is_test,
+      media_path, media_filename,
+    } = body as {
+      conversation_id?: string; content?: string; target?: string; is_test?: boolean;
+      media_path?: string; media_filename?: string;
     };
 
-    if (!content) return json({ error: "content required" }, 400);
+    if (!content && !media_path) return json({ error: "content or attachment required" }, 400);
 
-    // Read Fonnte settings
     const { data: settings } = await admin
-      .from("system_settings")
-      .select("key,value")
+      .from("system_settings").select("key,value")
       .in("key", ["fonnte_api_key", "fonnte_device"]);
     const api_key = settings?.find((s) => s.key === "fonnte_api_key")?.value;
-    if (!api_key) return json({ error: "Fonnte API key not configured. Setup in Settings → Fonnte." }, 400);
+    if (!api_key) return json({ error: "API key belum dikonfigurasi. Atur di Settings → WhatsApp Gateway." }, 400);
 
     let toNumber = target;
     let convId = conversation_id;
@@ -52,19 +60,30 @@ Deno.serve(async (req) => {
       const { data: conv } = await admin
         .from("conversations")
         .select("id, contact:contacts(whatsapp_number)")
-        .eq("id", convId)
-        .single();
+        .eq("id", convId).single();
       if (!conv) return json({ error: "Conversation not found" }, 404);
       // @ts-ignore
       toNumber = conv.contact?.whatsapp_number;
     }
-
     if (!toNumber) return json({ error: "target number required" }, 400);
 
-    // Send via Fonnte
+    // If attachment, generate a signed URL for Fonnte to fetch
+    let mediaUrl: string | null = null;
+    if (media_path) {
+      const { data: signed, error: signErr } = await admin.storage
+        .from("chat-media").createSignedUrl(media_path, 60 * 60 * 24 * 7); // 7-day URL
+      if (signErr || !signed) return json({ error: "Gagal membuat URL attachment: " + (signErr?.message || "") }, 500);
+      mediaUrl = signed.signedUrl;
+    }
+
     const fd = new FormData();
     fd.append("target", toNumber);
-    fd.append("message", content);
+    if (content) fd.append("message", content);
+    if (mediaUrl) {
+      fd.append("url", mediaUrl);
+      if (media_filename) fd.append("filename", media_filename);
+    }
+
     const fres = await fetch("https://api.fonnte.com/send", {
       method: "POST",
       headers: { Authorization: api_key },
@@ -78,36 +97,31 @@ Deno.serve(async (req) => {
 
     if (is_test) return json({ ok: true, fonnte: fdata });
 
-    // Persist outbound message + compute response_seconds vs last inbound
     const fonnteId = Array.isArray(fdata.id) ? String(fdata.id[0]) : (fdata.id ? String(fdata.id) : null);
 
     const { data: lastIn } = await admin
-      .from("messages")
-      .select("sent_at")
-      .eq("conversation_id", convId)
-      .eq("direction", "INBOUND")
-      .order("sent_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .from("messages").select("sent_at")
+      .eq("conversation_id", convId).eq("direction", "INBOUND")
+      .order("sent_at", { ascending: false }).limit(1).maybeSingle();
     const respSec = lastIn?.sent_at
       ? Math.max(0, Math.floor((Date.now() - new Date(lastIn.sent_at).getTime()) / 1000))
       : null;
 
+    const msgType = mediaUrl ? detectMediaType(media_path || "") : "TEXT";
     const { data: msg, error: insErr } = await admin
-      .from("messages")
-      .insert({
-        conversation_id: convId, direction: "OUTBOUND", type: "TEXT",
-        content, sent_by_id: user.id, fonnte_message_id: fonnteId,
+      .from("messages").insert({
+        conversation_id: convId, direction: "OUTBOUND", type: msgType,
+        content: content || (media_filename || "(attachment)"),
+        sent_by_id: user.id, fonnte_message_id: fonnteId,
         status: "SENT", response_seconds: respSec,
-      })
-      .select()
-      .single();
+        media_url: mediaUrl,
+      }).select().single();
     if (insErr) return json({ error: insErr.message }, 500);
 
     const { data: conv2 } = await admin.from("conversations").select("first_response_at").eq("id", convId).maybeSingle();
     const convPatch: any = {
       last_message_at: new Date().toISOString(),
-      last_message_preview: content.slice(0, 100),
+      last_message_preview: (content || media_filename || "(attachment)").slice(0, 100),
       last_replied_by_id: user.id,
     };
     if (!conv2?.first_response_at) convPatch.first_response_at = new Date().toISOString();
