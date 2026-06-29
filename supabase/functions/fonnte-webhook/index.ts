@@ -107,10 +107,14 @@ Deno.serve(async (req) => {
       if (echoMatch) return json({ ok: true, skip: "echo-content" });
 
       const msgType = mediaUrl ? detectMediaType(mediaUrl, mediaExt) : "TEXT";
+      // Attribute mirror to the conversation's active agent (assigned, else last replier)
+      const { data: convInfo } = await admin.from("conversations")
+        .select("assigned_agent_id,last_replied_by_id").eq("id", conv.id).maybeSingle();
+      const attributedAgent = convInfo?.assigned_agent_id || convInfo?.last_replied_by_id || null;
       const insert: any = {
         conversation_id: conv.id, direction: "OUTBOUND", type: msgType,
         content: message || (mediaUrl ? "(attachment)" : ""),
-        status: "DELIVERED", sent_by_id: null, // null = sent from WhatsApp device, not from inbox
+        status: "DELIVERED", sent_by_id: attributedAgent,
         media_url: mediaUrl,
       };
       if (fonnteMsgId) insert.fonnte_message_id = String(fonnteMsgId);

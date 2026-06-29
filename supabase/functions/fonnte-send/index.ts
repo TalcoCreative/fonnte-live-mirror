@@ -67,25 +67,27 @@ Deno.serve(async (req) => {
     }
     if (!toNumber) return json({ error: "target number required" }, 400);
 
-    // If attachment, generate a signed URL for Fonnte to fetch
+    // If attachment, download the file from storage and upload as binary multipart to Fonnte
     let mediaUrl: string | null = null;
+    let fileBlob: Blob | null = null;
     if (media_path) {
       const { data: signed, error: signErr } = await admin.storage
-        .from("chat-media").createSignedUrl(media_path, 60 * 60 * 24 * 7); // 7-day URL
+        .from("chat-media").createSignedUrl(media_path, 60 * 60 * 24 * 7);
       if (signErr || !signed) return json({ error: "Gagal membuat URL attachment: " + (signErr?.message || "") }, 500);
       mediaUrl = signed.signedUrl;
+      const { data: blob, error: dlErr } = await admin.storage.from("chat-media").download(media_path);
+      if (dlErr || !blob) return json({ error: "Gagal membaca file: " + (dlErr?.message || "") }, 500);
+      fileBlob = blob;
     }
 
     const fd = new FormData();
     fd.append("target", toNumber);
-    // Fonnte requires a non-empty message; use filename as caption fallback when attaching
     const wireMessage = content && content.trim().length > 0
       ? content
-      : (mediaUrl ? (media_filename || "") : "");
+      : (fileBlob ? (media_filename || " ") : "");
     fd.append("message", wireMessage);
-    if (mediaUrl) {
-      fd.append("url", mediaUrl);
-      if (media_filename) fd.append("filename", media_filename);
+    if (fileBlob) {
+      fd.append("file", fileBlob, media_filename || "attachment");
     }
 
     const fres = await fetch("https://api.fonnte.com/send", {
