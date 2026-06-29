@@ -555,18 +555,39 @@ function OpsTab() {
   const [slaGreen, setSlaGreen] = useState("5");
   const [slaYellow, setSlaYellow] = useState("10");
   const [busy, setBusy] = useState(false);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [pickAgent, setPickAgent] = useState<string>("");
+  const [pickShift, setPickShift] = useState<string>("");
 
   async function loadAll() {
-    const [{ data: s }, { data: sg }, { data: sy }] = await Promise.all([
+    const [{ data: s }, { data: sg }, { data: sy }, { data: ag }, { data: asg }] = await Promise.all([
       supabase.from("shifts").select("*").order("start_time"),
       supabase.from("system_settings").select("value").eq("key", "sla_green_minutes").maybeSingle(),
       supabase.from("system_settings").select("value").eq("key", "sla_yellow_minutes").maybeSingle(),
+      supabase.from("profiles").select("id, full_name, email, job_title").order("full_name"),
+      supabase.from("agent_shifts").select("id, agent_id, shift_id, effective_from").order("effective_from", { ascending: false }),
     ]);
     setShifts((s as any) || []);
     if (sg?.value) setSlaGreen(String(sg.value).replace(/"/g, ""));
     if (sy?.value) setSlaYellow(String(sy.value).replace(/"/g, ""));
+    setAgents(ag || []);
+    setAssignments(asg || []);
   }
   useEffect(() => { loadAll(); }, []);
+
+  async function assignAgentShift() {
+    if (!pickAgent || !pickShift) return toast.error("Pilih agent & shift");
+    const { error } = await supabase.from("agent_shifts").insert({ agent_id: pickAgent, shift_id: pickShift });
+    if (error) return toast.error(error.message);
+    toast.success("Shift ditugaskan");
+    setPickAgent(""); setPickShift(""); loadAll();
+  }
+  async function removeAssignment(id: string) {
+    const { error } = await supabase.from("agent_shifts").delete().eq("id", id);
+    if (error) toast.error(error.message); else loadAll();
+  }
+
 
   function toggleDay(d: number) {
     setDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
