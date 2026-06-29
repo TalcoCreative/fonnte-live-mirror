@@ -98,8 +98,15 @@ Deno.serve(async (req) => {
 
     // ===== Outbound device mirror (fromMe = true) =====
     if (fromMe) {
+      // Reject mirror from a different device on the same Fonnte account
+      const expectedDev = settings.fonnte_device ? normalizePhone(settings.fonnte_device) : null;
+      if (expectedDev && deviceField) {
+        const dev = normalizePhone(String(deviceField));
+        if (dev && dev !== expectedDev) return json({ ok: true, skip: "mirror-other-device", device: dev, expected: expectedDev });
+      }
       // Echo guard: ignore messages we already saved (sent from inbox)
       if (hasWatermark) return json({ ok: true, skip: "watermark-echo" });
+
       const twoMinAgo = new Date(Date.now() - 2 * 60_000).toISOString();
       const { data: echoMatch } = await admin.from("messages").select("id")
         .eq("conversation_id", conv.id).eq("direction", "OUTBOUND")
@@ -134,6 +141,12 @@ Deno.serve(async (req) => {
     const deviceNumber = settings.fonnte_device ? normalizePhone(settings.fonnte_device) : null;
     if (deviceNumber && contactNumber === deviceNumber) return json({ ok: true, skip: "self-device" });
     if (deviceField && normalizePhone(String(deviceField)) === contactNumber) return json({ ok: true, skip: "device-equals-sender" });
+    // Reject events from other devices on the same Fonnte account
+    if (deviceNumber && deviceField) {
+      const dev = normalizePhone(String(deviceField));
+      if (dev && dev !== deviceNumber) return json({ ok: true, skip: "other-device", device: dev, expected: deviceNumber });
+    }
+
 
     // Echo content guard for inbound (rare but possible)
     const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
@@ -166,7 +179,7 @@ Deno.serve(async (req) => {
     }).eq("id", contact.id);
 
     if (contact.chatbot_state !== "done" && settings.active_workflow_id && message) {
-      await runWorkflow(admin, contact, message, conv.id, settings.fonnte_api_key, settings.active_workflow_id);
+      await runWorkflow(admin, contact, message, conv.id, settings.fonnte_api_key, settings.active_workflow_id, settings.fonnte_device);
     }
 
     return json({ ok: true });
@@ -176,7 +189,7 @@ Deno.serve(async (req) => {
   }
 });
 
-async function runWorkflow(admin: any, contact: any, message: string, convId: string, api_key: string | undefined, workflowId: string) {
+async function runWorkflow(admin: any, contact: any, message: string, convId: string, api_key: string | undefined, workflowId: string, deviceNum?: string) {
   const { data: wf } = await admin.from("workflows").select("id,status,is_enabled").eq("id", workflowId).maybeSingle();
   if (!wf || wf.status !== "published" || !wf.is_enabled) return;
   const { data: steps } = await admin.from("workflow_steps").select("*").eq("workflow_id", workflowId).order("position");
@@ -193,7 +206,7 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
     const cur = steps[idx];
     const result = await consumeAnswer(admin, cur, message);
     if (!result.ok) {
-      await sendReply(admin, contact, convId, result.error || "Mohon coba lagi.", api_key);
+      await sendReply(admin, contact, convId, result.error || "Mohon coba lagi.", api_key, deviceNum);
       return;
     }
     data[cur.id] = result.value;
@@ -219,13 +232,13 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
 
     if (step.type === "message") {
       const text = await renderPrompt(admin, step, data);
-      await sendReply(admin, contact, convId, text, api_key);
+      await sendReply(admin, contact, convId, text, api_key, deviceNum);
       idx++; continue;
     }
 
     if (step.type === "closing") {
       const text = await renderPrompt(admin, step, data);
-      await sendReply(admin, contact, convId, text, api_key);
+      await sendReply(admin, contact, convId, text, api_key, deviceNum);
       contactUpdates.chatbot_state = "done";
       contactUpdates.chatbot_data = data;
       await admin.from("contacts").update(contactUpdates).eq("id", contact.id);
@@ -233,7 +246,7 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
     }
 
     const prompt = await renderPrompt(admin, step, data);
-    await sendReply(admin, contact, convId, prompt, api_key);
+    await sendReply(admin, contact, convId, prompt, api_key, deviceNum);
     contactUpdates.chatbot_state = step.id;
     contactUpdates.chatbot_data = data;
     await admin.from("contacts").update(contactUpdates).eq("id", contact.id);
@@ -322,13 +335,16 @@ async function consumeAnswer(admin: any, step: any, message: string): Promise<{ 
   }
 }
 
-async function sendReply(admin: any, contact: any, convId: string, text: string, api_key?: string) {
+async function sendReply(admin: any, contact: any, convId: string, text: string, api_key?: string, deviceNum?: string) {
   if (!text) return;
   if (!api_key) { console.warn("no api_key, skip send"); return; }
   const fd = new FormData();
   fd.append("target", contact.whatsapp_number);
   fd.append("message", text);
+  if (deviceNum) fd.append("device", String(deviceNum).replace(/\D/g, ""));
+  fd.append("countryCode", "62");
   try {
+
     const fres = await fetch("https://api.fonnte.com/send", { method: "POST", headers: { Authorization: api_key }, body: fd });
     const fdata = await fres.json().catch(() => ({}));
     const fonnteId = Array.isArray(fdata.id) ? String(fdata.id[0]) : (fdata.id ? String(fdata.id) : null);

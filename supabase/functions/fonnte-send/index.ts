@@ -50,7 +50,9 @@ Deno.serve(async (req) => {
       .from("system_settings").select("key,value")
       .in("key", ["fonnte_api_key", "fonnte_device"]);
     const api_key = settings?.find((s) => s.key === "fonnte_api_key")?.value;
+    const deviceNum = settings?.find((s) => s.key === "fonnte_device")?.value;
     if (!api_key) return json({ error: "API key belum dikonfigurasi. Atur di Settings → WhatsApp Gateway." }, 400);
+
 
     let toNumber = target;
     let convId = conversation_id;
@@ -86,6 +88,9 @@ Deno.serve(async (req) => {
       ? content
       : (fileBlob ? (media_filename || " ") : "");
     fd.append("message", wireMessage);
+    if (deviceNum) fd.append("device", String(deviceNum).replace(/\D/g, ""));
+    fd.append("countryCode", "62");
+
     if (fileBlob) {
       fd.append("file", fileBlob, media_filename || "attachment");
     }
