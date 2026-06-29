@@ -32,6 +32,10 @@ Deno.serve(async (req) => {
   const json = (d: any, s = 200) =>
     new Response(JSON.stringify(d), { status: s, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+  // Hardcoded blocklist — devices/tokens that must never reach this inbox
+  const BLOCKED_DEVICES = ["6281808881924"];
+  const BLOCKED_TOKENS = ["VLp1fpK78vrr6x2bDsZo"];
+
   try {
     let payload: Record<string, any> = {};
     const ct = req.headers.get("content-type") || "";
@@ -39,6 +43,12 @@ Deno.serve(async (req) => {
     else {
       const fd = await req.formData();
       for (const [k, v] of fd.entries()) payload[k] = typeof v === "string" ? v : "";
+    }
+
+    // Token guard — reject any webhook carrying a blocked token in body or headers
+    const tokenField = String(payload.token || payload.api_key || payload.apikey || req.headers.get("authorization") || "").trim();
+    if (tokenField && BLOCKED_TOKENS.some((t) => tokenField.includes(t))) {
+      return json({ ok: true, skip: "blocked-token" });
     }
 
     const sender = payload.sender || payload.from || payload.number;
@@ -53,7 +63,25 @@ Deno.serve(async (req) => {
     const mediaExt = (payload.extension || payload.filename || "").toString();
     const fromMe = payload.fromMe === true || payload.fromMe === "true" || payload.from_me === true || payload.fromme === true;
 
+    // Device blocklist — reject if the originating device is blocked
+    if (deviceField) {
+      const devN = normalizePhone(String(deviceField));
+      if (BLOCKED_DEVICES.some((d) => normalizePhone(d) === devN)) {
+        return json({ ok: true, skip: "blocked-device" });
+      }
+    }
+    // Also reject if sender or target equals blocked device (covers fromMe mirrors without device field)
+    const senderN = sender ? normalizePhone(String(sender)) : "";
+    const targetN = normalizePhone(String(payload.target || payload.to || payload.receiver || payload.recipient || ""));
+    if (BLOCKED_DEVICES.some((d) => {
+      const n = normalizePhone(d);
+      return n === senderN || n === targetN;
+    })) {
+      return json({ ok: true, skip: "blocked-device-party" });
+    }
+
     if (!sender) return json({ ok: false, error: "no sender" }, 400);
+
     if (!rawMessage && !mediaUrl && (payload.state || payload.status)) return json({ ok: true, skip: "status-callback" });
 
     // For fromMe (device-sent outbound), `sender` is OUR device; the recipient is in payload.target/to/receiver.
