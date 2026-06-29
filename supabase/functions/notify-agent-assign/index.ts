@@ -65,6 +65,9 @@ Deno.serve(async (req) => {
     const fd = new FormData();
     fd.append("target", phone);
     fd.append("message", message);
+    if (deviceNum) fd.append("device", String(deviceNum).replace(/\D/g, ""));
+    fd.append("countryCode", "62");
+
     const fres = await fetch("https://api.fonnte.com/send", {
       method: "POST",
       headers: { Authorization: api_key },
