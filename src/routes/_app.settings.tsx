@@ -25,6 +25,7 @@ function SettingsPage() {
     { v: "quick", label: "Quick Replies" },
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
+    { v: "ops", label: "Shift & SLA" },
     { v: "webhook", label: "Webhook" },
   ];
   return (
@@ -51,6 +52,7 @@ function SettingsPage() {
         {tab === "quick" && <QuickRepliesTab />}
         {tab === "products" && <ProductsTab />}
         {tab === "team" && <TeamTab />}
+        {tab === "ops" && <OpsTab />}
         {tab === "webhook" && <WebhookTab />}
       </div>
     </div>
