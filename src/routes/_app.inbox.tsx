@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Send, Search, Loader2, User as UserIcon, Tag, Zap, FileText, MoreVertical, StickyNote, MessageSquare, Trash2, Package } from "lucide-react";
+import { Send, Search, Loader2, User as UserIcon, Tag, Zap, FileText, MoreVertical, StickyNote, MessageSquare, Trash2, Package, Paperclip, Image as ImageIcon, Smartphone, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -38,6 +38,7 @@ type Message = {
   direction: "INBOUND" | "OUTBOUND"; content: string;
   sent_at: string; sent_by_id: string | null; status: string;
   type: "TEXT" | "IMAGE" | "DOCUMENT" | "AUDIO" | "INTERNAL_NOTE";
+  media_url: string | null;
 };
 type QuickReply = { id: string; name: string; content: string; sort_order: number };
 type Product = { id: string; name: string };
@@ -59,6 +60,8 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   const [mode, setMode] = useState<ComposeMode>("reply");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   async function loadConversations() {
@@ -193,13 +196,14 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
 
   async function sendMessage(payload?: string) {
     const content = (payload ?? text).trim();
-    if (!content || !activeId) return;
+    if ((!content && !pendingFile) || !activeId) return;
     setSending(true);
     const textBackup = content;
+    const fileBackup = pendingFile;
     setText("");
+    setPendingFile(null);
 
     if (mode === "note") {
-      // Internal note: insert directly, never sent via WhatsApp gateway
       const { error } = await supabase.from("messages").insert({
         conversation_id: activeId,
         direction: "OUTBOUND",
@@ -214,26 +218,54 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       return;
     }
 
+    // Upload attachment first (if any)
+    let media_path: string | undefined;
+    let media_filename: string | undefined;
+    if (fileBackup) {
+      const safeName = fileBackup.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${activeId}/${Date.now()}-${safeName}`;
+      const { error: upErr } = await supabase.storage.from("chat-media").upload(path, fileBackup, {
+        contentType: fileBackup.type || "application/octet-stream",
+        upsert: false,
+      });
+      if (upErr) {
+        setSending(false);
+        toast.error("Upload gagal: " + upErr.message);
+        setText(textBackup); setPendingFile(fileBackup);
+        return;
+      }
+      media_path = path;
+      media_filename = safeName;
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fonnte-send`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ conversation_id: activeId, content }),
+      body: JSON.stringify({ conversation_id: activeId, content, media_path, media_filename }),
     });
     const json = await res.json();
     setSending(false);
-    if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); return; }
-    // Log reply
+    if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); setPendingFile(fileBackup); return; }
     if (user) {
       await supabase.from("activity_logs").insert({
         user_id: user.id, action: "reply_message",
         entity_type: "conversation", entity_id: activeId,
         metadata: {
           contact_name: active?.contact?.full_name, whatsapp: active?.contact?.whatsapp_number,
-          length: content.length,
+          length: content.length, has_attachment: !!media_path,
         },
       } as any);
     }
+  }
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 15 * 1024 * 1024) { toast.error("Maksimal 15MB"); return; }
+    setPendingFile(f);
+    setMode("reply");
+    e.target.value = "";
   }
 
   async function logAction(action: string, metadata: Record<string, any> = {}) {
@@ -577,15 +609,39 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                     );
                   }
                   const out = m.direction === "OUTBOUND";
+                  const isMirror = out && !m.sent_by_id; // sent from WA device, not from inbox
+                  const senderLabel = out
+                    ? (isMirror ? "WhatsApp (HP)" : agentName(m.sent_by_id))
+                    : (active.contact?.full_name || "Pelanggan");
                   return (
                     <div key={m.id} className={cn("flex flex-col gap-0.5", out ? "items-end" : "items-start")}>
-                      <span className="text-[10px] text-muted-foreground px-1">
-                        {out ? agentName(m.sent_by_id) : (active.contact?.full_name || "Pelanggan")}
+                      <span className={cn("text-[10px] px-1 flex items-center gap-1",
+                        isMirror ? "text-emerald-600 dark:text-emerald-400 italic" : "text-muted-foreground")}>
+                        {isMirror && <Smartphone className="size-2.5" />}
+                        {senderLabel}
                       </span>
                       <div className={cn("max-w-[75%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words shadow-sm",
                         out ? "bg-chat-out text-chat-out-foreground rounded-br-sm"
                             : "bg-chat-in text-chat-in-foreground border rounded-bl-sm")}>
-                        {m.content}
+                        {m.media_url && m.type === "IMAGE" && (
+                          <a href={m.media_url} target="_blank" rel="noreferrer" className="block mb-1">
+                            <img src={m.media_url} alt="attachment" className="max-h-64 rounded-lg object-cover" />
+                          </a>
+                        )}
+                        {m.media_url && m.type === "AUDIO" && (
+                          <audio src={m.media_url} controls className="max-w-full mb-1" />
+                        )}
+                        {m.media_url && m.type === "DOCUMENT" && (
+                          <a href={m.media_url} target="_blank" rel="noreferrer"
+                            className="flex items-center gap-2 mb-1 px-2 py-1.5 rounded-lg bg-background/40 border border-white/20 hover:bg-background/60 text-xs">
+                            <FileText className="size-4 shrink-0" />
+                            <span className="truncate">{m.content || "Dokumen"}</span>
+                          </a>
+                        )}
+                        {(!m.media_url || m.type === "TEXT") && m.content}
+                        {m.media_url && m.type !== "TEXT" && m.content && m.content !== "(attachment)" && (
+                          <div className="mt-1">{m.content}</div>
+                        )}
                         <div className="text-[10px] opacity-60 mt-1 text-right">
                           {new Date(m.sent_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
                         </div>
@@ -643,16 +699,34 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                       </div>
                     </>
                   )}
+                  {mode === "reply" && (
+                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1"
+                      onClick={() => fileInputRef.current?.click()}>
+                      <Paperclip className="size-3" /> Lampiran
+                    </Button>
+                  )}
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={onPickFile}
+                    accept="image/*,application/pdf,audio/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" />
                 </div>
+                {pendingFile && (
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg border bg-muted/40 text-xs">
+                    {pendingFile.type.startsWith("image/") ? <ImageIcon className="size-4 text-primary" /> : <FileText className="size-4 text-primary" />}
+                    <span className="truncate flex-1">{pendingFile.name}</span>
+                    <span className="text-muted-foreground">{(pendingFile.size / 1024).toFixed(0)} KB</span>
+                    <button type="button" onClick={() => setPendingFile(null)} className="text-muted-foreground hover:text-destructive">
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <Input value={text} onChange={(e) => setText(e.target.value)}
                     placeholder={mode === "note"
                       ? "Catatan internal — hanya dilihat agent..."
-                      : `Balas sebagai ${agentName(user?.id || null)}...`}
+                      : pendingFile ? "Caption (opsional)..." : `Balas sebagai ${agentName(user?.id || null)}...`}
                     disabled={sending}
                     className={mode === "note" ? "bg-amber-50 dark:bg-amber-500/10 border-amber-300" : ""}
                     autoFocus />
-                  <Button type="submit" disabled={sending || !text.trim()}
+                  <Button type="submit" disabled={sending || (!text.trim() && !pendingFile)}
                     className={mode === "note" ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}>
                     {sending ? <Loader2 className="size-4 animate-spin" /> :
                       mode === "note" ? <StickyNote className="size-4" /> : <Send className="size-4" />}
