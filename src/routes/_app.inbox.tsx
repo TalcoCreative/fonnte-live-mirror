@@ -361,9 +361,12 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
             )}
             {filtered.map((c) => {
               const stage = stages.find((s) => s.id === c.contact?.stage_id);
+              const sla = slaTone(c);
+              const slaCls = sla === "ok" ? "border-l-emerald-500" : sla === "warn" ? "border-l-amber-500" : sla === "danger" ? "border-l-rose-500" : "border-l-transparent";
               return (
                 <button key={c.id} onClick={() => setActiveId(c.id)}
-                  className={cn("w-full text-left px-4 py-3 border-b hover:bg-accent/60 flex flex-col gap-1 transition-colors",
+                  className={cn("w-full text-left px-4 py-3 border-b border-l-4 hover:bg-accent/60 flex flex-col gap-1 transition-colors",
+                    slaCls,
                     activeId === c.id && "bg-accent")}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-sm truncate">
