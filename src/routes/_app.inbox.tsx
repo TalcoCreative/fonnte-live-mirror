@@ -286,6 +286,22 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     loadConversations();
   }
 
+  async function changeProduct(productId: string | null) {
+    if (!active?.contact_id) return;
+    const prev = active.contact?.interested_product_id || null;
+    const { error } = await supabase.from("contacts").update({ interested_product_id: productId }).eq("id", active.contact_id);
+    if (error) return toast.error(error.message);
+    await logAction("change_product", {
+      contact_id: active.contact_id,
+      contact_name: active.contact?.full_name, whatsapp: active.contact?.whatsapp_number,
+      from_product_id: prev, to_product_id: productId,
+      from_product: products.find((p) => p.id === prev)?.name || null,
+      to_product: products.find((p) => p.id === productId)?.name || null,
+    });
+    toast.success("Produk diperbarui");
+    loadConversations();
+  }
+
   async function deleteConversation() {
     if (!active) return;
     // Delete conversation (cascade removes messages). Reset chatbot_state so the next inbound restarts the bot — but keep the lead (contact) so name/phone/keluhan get UPDATED in place on the next round.
