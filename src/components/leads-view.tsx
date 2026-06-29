@@ -266,24 +266,41 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved 
   useEffect(() => {
     if (!contact) return;
     (async () => {
-      // Find conversation IDs for this contact, then load logs scoped to contact or its convs
       const { data: convs } = await supabase.from("conversations").select("id").eq("contact_id", contact.id);
-      const ids = [contact.id, ...((convs || []).map((c: any) => c.id))];
-      const [{ data: lg }, { data: profs }] = await Promise.all([
+      const convIds = (convs || []).map((c: any) => c.id);
+      const ids = [contact.id, ...convIds];
+      const [{ data: lg }, { data: ev }, { data: profs }, { data: stagesAll }, { data: prodAll }] = await Promise.all([
         supabase.from("activity_logs")
           .select("*")
           .in("entity_id", ids)
           .in("action", ["change_stage", "assign_agent", "reply_message", "delete_chat"])
           .order("created_at", { ascending: false })
           .limit(100),
+        supabase.from("audit_events")
+          .select("*")
+          .eq("contact_id", contact.id)
+          .order("occurred_at", { ascending: false })
+          .limit(200),
         supabase.from("profiles").select("id, full_name, email"),
+        supabase.from("stages").select("id, name"),
+        supabase.from("products").select("id, name"),
       ]);
-      setLogs(lg || []);
       const pm: Record<string, any> = {};
       (profs || []).forEach((p: any) => { pm[p.id] = p; });
+      const sm: Record<string, string> = {};
+      (stagesAll || []).forEach((s: any) => { sm[s.id] = s.name; });
+      const prm: Record<string, string> = {};
+      (prodAll || []).forEach((p: any) => { prm[p.id] = p.name; });
+      // Merge: tag source so renderer knows which schema
+      const merged = [
+        ...((lg || []).map((x: any) => ({ ...x, _src: "log", _ts: x.created_at }))),
+        ...((ev || []).map((x: any) => ({ ...x, _src: "audit", _ts: x.occurred_at, _stages: sm, _products: prm }))),
+      ].sort((a, b) => new Date(b._ts).getTime() - new Date(a._ts).getTime());
+      setLogs(merged);
       setProfMap(pm);
     })();
   }, [contact?.id]);
+
 
   if (!contact || !form) return null;
 
@@ -330,6 +347,24 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved 
   }
 
   function actionLabel(l: any) {
+    if (l._src === "audit") {
+      const who = agentName(l.actor_id);
+      const sm = l._stages || {}; const prm = l._products || {};
+      const oldV = l.old_value || {}; const newV = l.new_value || {};
+      switch (l.event_type) {
+        case "contact_created": return <>Lead dibuat: <b>{newV.full_name || newV.whatsapp_number}</b></>;
+        case "stage_changed": return <>Stage diubah oleh <b>{who}</b>: <span className="text-muted-foreground">{sm[oldV.stage_id] || "—"}</span> <ArrowRight className="inline size-3" /> <b>{sm[newV.stage_id] || "—"}</b></>;
+        case "assigned": return <>Ditugaskan oleh <b>{who}</b> ke <b>{agentName(newV.agent_id)}</b></>;
+        case "reassigned": return <>Re-assign oleh <b>{who}</b>: <span className="text-muted-foreground">{agentName(oldV.agent_id)}</span> <ArrowRight className="inline size-3" /> <b>{agentName(newV.agent_id)}</b></>;
+        case "product_changed": return <>Produk diubah oleh <b>{who}</b>: <span className="text-muted-foreground">{prm[oldV.product_id] || "—"}</span> <ArrowRight className="inline size-3" /> <b>{prm[newV.product_id] || "—"}</b></>;
+        case "name_changed": return <>Nama diubah oleh <b>{who}</b>: <span className="text-muted-foreground">{oldV.full_name || "—"}</span> <ArrowRight className="inline size-3" /> <b>{newV.full_name || "—"}</b></>;
+        case "chat_in": return <>Pesan masuk dari customer</>;
+        case "chat_out": return <>Balasan dari <b>{who}</b></>;
+        case "conv_assigned":
+        case "conv_takeover": return <>Conversation di-assign ke <b>{agentName(newV.agent_id)}</b></>;
+        default: return l.event_type;
+      }
+    }
     const m = l.metadata || {};
     const who = agentName(l.user_id);
     if (l.action === "change_stage") return <>Stage diubah oleh <b>{who}</b>: <span className="text-muted-foreground">{m.from_stage || "—"}</span> <ArrowRight className="inline size-3" /> <b>{m.to_stage || "—"}</b></>;
@@ -338,6 +373,7 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved 
     if (l.action === "delete_chat") return <>Chat dihapus oleh <b>{who}</b></>;
     return l.action;
   }
+
 
   return (
     <Dialog open={!!contact} onOpenChange={(v) => !v && onClose()}>
@@ -386,12 +422,13 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved 
           ) : (
             <ol className="relative border-l border-border ml-2 space-y-3">
               {logs.map((l) => (
-                <li key={l.id} className="ml-4">
+                <li key={`${l._src}-${l.id}`} className="ml-4">
                   <div className="absolute -left-1.5 size-3 rounded-full bg-primary glow-primary" />
-                  <div className="text-xs text-muted-foreground">{new Date(l.created_at).toLocaleString("id-ID")}</div>
+                  <div className="text-xs text-muted-foreground">{new Date(l._ts || l.created_at).toLocaleString("id-ID")}</div>
                   <div className="text-sm">{actionLabel(l)}</div>
                 </li>
               ))}
+
             </ol>
           )}
         </div>
