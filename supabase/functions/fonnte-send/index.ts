@@ -50,7 +50,9 @@ Deno.serve(async (req) => {
       .from("system_settings").select("key,value")
       .in("key", ["fonnte_api_key", "fonnte_device"]);
     const api_key = settings?.find((s) => s.key === "fonnte_api_key")?.value;
+    const deviceNum = settings?.find((s) => s.key === "fonnte_device")?.value;
     if (!api_key) return json({ error: "API key belum dikonfigurasi. Atur di Settings → WhatsApp Gateway." }, 400);
+
 
     let toNumber = target;
     let convId = conversation_id;
