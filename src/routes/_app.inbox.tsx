@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Send, Search, Loader2, User as UserIcon, Tag, Zap, FileText, MoreVertical, StickyNote, MessageSquare, Trash2 } from "lucide-react";
+import { Send, Search, Loader2, User as UserIcon, Tag, Zap, FileText, MoreVertical, StickyNote, MessageSquare, Trash2, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -286,6 +286,22 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     loadConversations();
   }
 
+  async function changeProduct(productId: string | null) {
+    if (!active?.contact_id) return;
+    const prev = active.contact?.interested_product_id || null;
+    const { error } = await supabase.from("contacts").update({ interested_product_id: productId }).eq("id", active.contact_id);
+    if (error) return toast.error(error.message);
+    await logAction("change_product", {
+      contact_id: active.contact_id,
+      contact_name: active.contact?.full_name, whatsapp: active.contact?.whatsapp_number,
+      from_product_id: prev, to_product_id: productId,
+      from_product: products.find((p) => p.id === prev)?.name || null,
+      to_product: products.find((p) => p.id === productId)?.name || null,
+    });
+    toast.success("Produk diperbarui");
+    loadConversations();
+  }
+
   async function deleteConversation() {
     if (!active) return;
     // Delete conversation (cascade removes messages). Reset chatbot_state so the next inbound restarts the bot — but keep the lead (contact) so name/phone/keluhan get UPDATED in place on the next round.
@@ -448,6 +464,17 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                       </Select>
                     </div>
                     <div className="flex items-center gap-1.5">
+                      <Package className="size-3.5 text-muted-foreground" />
+                      <Select value={active.contact?.interested_product_id || "none"}
+                        onValueChange={(v) => changeProduct(v === "none" ? null : v)}>
+                        <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Produk" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Tanpa produk</SelectItem>
+                          {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <UserIcon className="size-3.5 text-muted-foreground" />
                       <Select value={active.assigned_agent_id || "unassigned"}
                         onValueChange={(v) => assignAgent(v === "unassigned" ? null : v)}>
@@ -484,6 +511,19 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                           <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pilih stage" /></SelectTrigger>
                           <SelectContent>
                             {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                          <Package className="size-3" /> Produk
+                        </div>
+                        <Select value={active.contact?.interested_product_id || "none"}
+                          onValueChange={(v) => changeProduct(v === "none" ? null : v)}>
+                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Pilih produk" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Tanpa produk</SelectItem>
+                            {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       </div>
