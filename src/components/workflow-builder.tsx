@@ -337,7 +337,7 @@ function SortableStepCard({ step, index, steps, expanded, onExpand, onUpdate, on
           {meta.mappable && (
             <div className="space-y-1.5">
               <Label className="text-xs">Mapping ke Database</Label>
-              <Select value={step.mapping || ""} onValueChange={(v) => onUpdate({ mapping: v || null })} disabled={locked}>
+              <Select value={step.mapping || "__none"} onValueChange={(v) => onUpdate({ mapping: v === "__none" ? null : v })} disabled={locked}>
                 <SelectTrigger><SelectValue placeholder="Tidak disimpan" /></SelectTrigger>
                 <SelectContent>
                   {MAPPING_FIELDS.map((f) => <SelectItem key={f.value || "none"} value={f.value || "__none"}>{f.label}</SelectItem>)}
