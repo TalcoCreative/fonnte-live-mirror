@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Loader2, Copy, ExternalLink, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { WorkflowBuilderTab } from "@/components/workflow-builder";
 
 export const Route = createFileRoute("/_app/settings")({
   head: () => ({ meta: [{ title: "Settings — Husada CRM" }] }),
@@ -22,7 +23,8 @@ function SettingsPage() {
   const [tab, setTab] = useState("gateway");
   const tabs = [
     { v: "gateway", label: "WhatsApp Gateway" },
-    { v: "workflow", label: "Workflow" },
+    { v: "flow", label: "Bot Workflow" },
+    { v: "pipeline", label: "Pipeline" },
     { v: "quick", label: "Quick Replies" },
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
@@ -50,7 +52,8 @@ function SettingsPage() {
 
       <div>
         {tab === "gateway" && <FonnteTab />}
-        {tab === "workflow" && <WorkflowTab />}
+        {tab === "flow" && <WorkflowBuilderTab />}
+        {tab === "pipeline" && <WorkflowTab />}
         {tab === "quick" && <QuickRepliesTab />}
         {tab === "products" && <ProductsTab />}
         {tab === "team" && <TeamTab />}
