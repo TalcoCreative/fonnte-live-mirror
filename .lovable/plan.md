@@ -1,72 +1,77 @@
-## Husada CRM — Lovable Cloud + Fonnte API
+# Husada CRM — Major Revision Plan
 
-Membangun ulang CRM Husada (originalnya Next.js + Prisma + WAHA) di stack Lovable (TanStack Start + Lovable Cloud). WAHA diganti **Fonnte**, ditambah **Settings → Fonnte** untuk input API key + test koneksi, plus **live chat realtime mirroring**.
+Scope ini sangat besar (≈ setara membangun ulang ~60% sistem). Untuk menjaga stabilitas data existing dan agar setiap fitur bisa diuji sebelum lanjut, saya pecah menjadi 6 fase. Setiap fase di-deliver berurutan, di-review, baru fase berikutnya dieksekusi. Tidak ada data lama yang dihapus — hanya ditambah kolom/tabel baru + backfill.
 
-### Stack
-- Frontend: TanStack Start + shadcn/ui + Tailwind
-- Backend: Lovable Cloud (Postgres + Auth + Edge Functions + Realtime)
-- WhatsApp: Fonnte API (`https://api.fonnte.com`)
+---
 
-### Database (Supabase, semua dengan RLS + GRANTs)
-- `profiles` (id ref auth.users, full_name, whatsapp_number, avatar_url)
-- `user_roles` (user_id, role: super_admin/admin/agent) — pakai security-definer `has_role()`
-- `stages` (name, color, order_index, is_default, is_terminal)
-- `tags`, `contact_tags`
-- `products` (name, description, category, is_active)
-- `contacts` (whatsapp_number unique, full_name, age, domicile, chief_complaint, stage_id, assigned_agent_id, interested_product_id, chatbot_state, chatbot_data jsonb, last_interaction_at, total_messages, notes)
-- `conversations` (contact_id, status OPEN/PENDING/RESOLVED, assigned_agent_id, last_message_at, last_replied_by_id)
-- `messages` (conversation_id, direction INBOUND/OUTBOUND, type, content, sent_by_id, sent_at, fonnte_message_id unique, status)
-- `templates` (name, content, category)
-- `system_settings` (key, value) — termasuk `fonnte_api_key`, `fonnte_device`, `auto_followup_enabled/hours/template`
-- `activity_logs`, `assign_history`, `follow_ups`
+## Fase 1 — Fondasi: RBAC + Audit Log + Shift (wajib pertama)
 
-Semua tabel: GRANTs untuk authenticated + service_role, RLS policy berbasis `has_role()`.
+Semua fitur lain bergantung pada ini.
 
-### Edge Functions (Supabase, publik untuk webhook, auth untuk app)
-1. `fonnte-test` — POST { api_key } → call `https://api.fonnte.com/validate` → return device status (untuk tombol "Test Koneksi" di Settings).
-2. `fonnte-send` — POST { conversation_id, content } → ambil api_key dari settings → call Fonnte `/send` → insert message OUTBOUND. Dipanggil agent dari inbox.
-3. `fonnte-webhook` — endpoint publik untuk Fonnte incoming webhook → find/create contact + conversation → insert message INBOUND → jalankan chatbot onboarding (ask_product → ask_name → ask_domicile → done) → trigger Realtime.
-4. `fonnte-test-send` — POST { number, message } → kirim ke nomor sendiri buat verifikasi end-to-end di Settings.
+- Tambah role baru di enum `app_role`: `first_response` (FR), `agent` (existing, jadi "Semi Super Admin"), `super_admin` (existing). Hapus role `admin` lama (digabung ke super_admin).
+- Helper `has_role` dan policy RLS diperbarui untuk membaca role baru.
+- Tabel baru `shifts` (name, start_time, end_time, color) + kolom `profiles.shift_id`, `profiles.division`.
+- Tabel `activity_logs` (sudah ada) di-extend: kolom `old_value JSONB`, `new_value JSONB`, `entity_label TEXT`. Index `(entity_type, entity_id, created_at)` + `(user_id, created_at)`.
+- Database trigger `log_changes()` dipasang di `contacts`, `conversations`, `messages` untuk auto-capture: stage change, product change, name change, assignment, take-over, delete. Insert log otomatis tanpa application code.
+- Audit log jadi single source of truth untuk semua analytics historis (KPI dihitung dari log, bukan kondisi terakhir).
 
-### Realtime / Live Chat Mirroring
-- Subscribe ke `postgres_changes` di tabel `messages` (filter per `conversation_id`) → UI inbox auto-append message baru tanpa refresh.
-- Subscribe ke `conversations` untuk update list sidebar (last_message_at, unread).
-- Outbound yang dikirim agent muncul instan di pengirim **dan** di tab lain yang buka conversation sama (mirroring multi-device/multi-agent).
-- Indikator "agent X sedang mengetik" optional via broadcast channel (skip MVP).
+## Fase 2 — Inbox: Filter, Sort, Edit Inline, SLA, RBAC Gating
 
-### Pages (TanStack routes)
-- `/auth` — login / signup (Lovable Cloud auth, email+password, auto-confirm)
-- `/_authenticated/` layout (redirect ke `/auth` jika belum login)
-  - `/dashboard` — stats kartu (total leads, deal, closed, response time)
-  - `/leads` — tabel kontak + filter stage + toggle "My Leads" + import/export Excel (export saja di MVP)
-  - `/leads/$id` — detail kontak + history percakapan + edit + assign
-  - `/inbox` — split view: list conversation + chat panel realtime
-  - `/broadcast` — kirim template ke banyak kontak
-  - `/settings` — tab: **Fonnte** (api key + test), Users, Products, Stages, Templates, Auto Follow-up
-- `/api/fonnte/webhook` (TanStack server route publik) — fallback webhook receiver yang forward ke edge function (atau langsung Fonnte point ke edge function URL).
+- Inbox query difilter berdasarkan role:
+  - FR Agent: hanya `stage IN ('Leads Masuk','First Response')` + My Inbox tab (chat yang pernah disentuh log-nya).
+  - Agent / Super Admin: semua chat.
+- Sorting: Terbaru, Terlama, Unread, Prioritas, Nama A-Z/Z-A (dropdown).
+- Filter chips: Unread, Assigned to Me, Belum Assigned, Priority, Stage, Product, Shift.
+- Inline edit nama customer di header chat → broadcast realtime ke Inbox/Leads/Customer DB.
+- Badge SLA per chat (hijau <5m, kuning 5–10m, merah >10m) — threshold disimpan di `system_settings.sla_thresholds`.
+- Internal Notes upgrade: mention `@agent`, edit & delete history disimpan di audit log.
 
-### Settings → Fonnte (fitur baru, fokus tambahan user)
-- Input: API Key (secret) + Device Number
-- Tombol **"Test Koneksi"** → call `fonnte-test` → tampilkan status device (connected/disconnected, quota, expired)
-- Tombol **"Test Kirim Pesan"** → input nomor + pesan → call `fonnte-test-send` → tampilkan response
-- Tampilkan webhook URL yang harus di-paste user ke dashboard Fonnte
-- API key disimpan terenkripsi di `system_settings` (server-only read via edge function; tidak pernah dikirim ke browser)
+## Fase 3 — Dashboard berbasis Audit Log + Filter Multi-Dimensi
 
-### Chatbot Onboarding (port dari original)
-Edge function `fonnte-webhook` jalankan state machine:
-1. null → greet + list produk → `ask_product`
-2. ask_product → simpan minat → tanya nama → `ask_name`
-3. ask_name → simpan nama → tanya domisili → `ask_domicile`
-4. ask_domicile → simpan domisili → set `done` → handoff ke agent
+- Server function `getDashboardMetrics({ filters, range })` melakukan agregasi SQL di Postgres (bukan client). Pagination + windowing.
+- Multi-filter combinable: agent, divisi, shift, role, stage, product + date-range picker (hari/minggu/bulan/tahun/custom range/range bulan/range tahun).
+- KPI: Total Chat, Leads, Appointment, Closed, Lost, Conversion %, Avg First Response, Avg Resolve, Avg Handle, Total Assignment, Total Takeover, Chat per Product, Chat per Divisi.
+- Charts (Recharts): Line trend, Bar per agent/produk, Donut stage distribution, Heatmap jam×hari.
+- Leaderboard tabs: Fastest Response, Most Conversation, Most Closed, Most Leads, Highest Conversion — filter periode independen.
+- Dashboard khusus `/dashboard/first-response` untuk role FR: KPI First Response (Total FR, Shift Take Over, Chat Dilanjutkan, Avg Response/Handle, Avg Conv per Shift) + grafik produktivitas.
 
-### Scope Cut (untuk MVP yang bisa di-deliver & dites)
-**Termasuk:** auth, leads CRUD, inbox + realtime live chat mirroring, Fonnte settings + test + send + webhook + chatbot, stages, products, users (roles), basic dashboard stats, export Excel.
-**Skip dulu (bisa ditambah berikutnya):** assign WA notification, auto follow-up cron (perlu pg_cron), KPI leaderboard lateral join, broadcast scheduler, import Excel (export saja).
+## Fase 4 — Dynamic Workflow Builder
 
-### Testing
-- Test koneksi Fonnte via tombol di Settings (butuh user input API key asli dari fonnte.com).
-- Mock webhook test via `stack_modern--invoke-server-function` POST ke endpoint webhook publik dengan payload Fonnte → verify message muncul realtime di UI.
-- Buka 2 tab inbox → kirim message → mirroring otomatis muncul di kedua tab.
+- Tabel `workflows` (name, status: draft/published, version, is_active) + `workflow_steps` (workflow_id, order, type, config JSONB, mapping_field, next_step_id, condition JSONB).
+- Step types: message, input text, dropdown, radio, checkbox, date, phone, email, number, file upload, conditional, closing.
+- UI builder di `/settings/workflows`: drag-drop (dnd-kit), duplicate, versioning, enable/disable, draft, publish.
+- Engine baru `chatbot-runner` (edge function) menggantikan chatbot hardcoded di `fonnte-webhook`. Mapping ke `customers.*` / `leads.*` per step.
+- **Product TIDAK ditanyakan ke customer.** Hanya kategori kebutuhan (dropdown). Product di-assign manual oleh FR/Agent dari Inbox → realtime update leads.
 
-### Catatan
-Skala kerjaan ini besar (~30-40 file). Saya bangun bertahap di satu pass: enable Cloud → migrasi DB → edge functions → UI auth & layout → inbox realtime → settings Fonnte → leads → polish. Setelah itu kita testing bareng (Anda kasih API key Fonnte asli untuk test koneksi end-to-end).
+## Fase 5 — WhatsApp Mirroring Lengkap + Quick Reply Master
+
+- `messages.type` extend: TEXT, IMAGE, VIDEO, AUDIO/VN, PDF, DOC, XLS, STICKER, CONTACT, LOCATION.
+- Webhook handler men-download media URL dari WA Gateway → upload ke Supabase Storage bucket `wa-media` (private + signed URL).
+- Outbound: composer di Inbox support attachment upload (image/video/doc) → kirim via gateway `sendMedia`.
+- Bubble menampilkan: nama pengirim, role badge, jam, delivery status (sent/delivered/read).
+- Quick Reply: tabel `quick_replies` + `quick_reply_categories` (Salam, Menunggu, Jadwal Dokter, Administratif, BPJS, Rawat Jalan, Rawat Inap, MCU, Lab, Penutup). CRUD di Settings, picker di Inbox composer (slash command `/`).
+
+## Fase 6 — Polish, Performance, Permission Gating UI
+
+- Setiap route & menu item di-gate sesuai role (FR tidak lihat Settings, Workflow, API, dll).
+- Hilangkan semua onboarding hardcoded — flow chatbot 100% dari workflow builder.
+- Optimisasi: materialized view `daily_metrics` di-refresh per 5 menit untuk dashboard cepat di data besar; semua list pakai keyset pagination.
+- Index tambahan untuk audit query (BRIN pada `created_at`).
+- QA pass: test setiap role login (FR vina test, Agent, Super Admin), reproduce flow chat end-to-end.
+
+---
+
+## Detail Teknis
+
+Stack tetap: TanStack Start + Supabase + WA Gateway existing. Tambah dependency: `@dnd-kit/core` (workflow builder), `date-fns` (sudah ada). Tidak ganti file integrasi auto-gen.
+
+Migrasi DB dipecah per fase, masing-masing reversible. Data existing (contacts, conversations, messages, leads, agents) tidak dihapus — hanya backfill: contoh `activity_logs` di-seed dari `messages` historis agar dashboard punya history saat go-live.
+
+---
+
+## Pertanyaan sebelum mulai
+
+1. **Mulai semua fase sekaligus atau fase-per-fase dengan review?** Saya rekomendasikan fase-per-fase — total kerjaan ini 5–8 jam build agent. Sekaligus = resiko regresi tinggi & sulit di-rollback.
+2. **Role mapping**: agent `vina@husada.com` tetap `super_admin`. Untuk 4 agent existing lain (candy, aura, audina, maya) — siapa yang FR, siapa yang Agent? Default saya: semua jadi `agent`, lalu Anda assign FR via Settings → Tim Agent.
+3. **Shift definitions** default: Pagi (07–15), Siang (15–23), Malam (23–07). Setuju atau custom?
+4. **Workflow builder live default**: pakai workflow contoh di PRD (Nama → Kategori → Pertanyaan → Closing) sebagai workflow `Default Husada v1` yang langsung aktif menggantikan bot lama?
