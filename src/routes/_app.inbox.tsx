@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Send, Search, Loader2, User as UserIcon, Tag, Zap, FileText, MoreVertical, StickyNote, MessageSquare, Trash2, Package, Paperclip, Image as ImageIcon, Smartphone, X } from "lucide-react";
+import { Send, Search, Loader2, User as UserIcon, Tag, Zap, FileText, MoreVertical, StickyNote, MessageSquare, Trash2, Package, Smartphone, MailOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -61,9 +61,9 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   const [mode, setMode] = useState<ComposeMode>("reply");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = useRef(false);
 
   async function loadConversations() {
     let q = supabase
@@ -201,12 +201,10 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
 
   async function sendMessage(payload?: string) {
     const content = (payload ?? text).trim();
-    if ((!content && !pendingFile) || !activeId) return;
+    if (!content || !activeId) return;
     setSending(true);
     const textBackup = content;
-    const fileBackup = pendingFile;
     setText("");
-    setPendingFile(null);
 
     if (mode === "note") {
       const { error } = await supabase.from("messages").insert({
@@ -223,55 +221,49 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       return;
     }
 
-    // Upload attachment first (if any)
-    let media_path: string | undefined;
-    let media_filename: string | undefined;
-    if (fileBackup) {
-      const safeName = fileBackup.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${activeId}/${Date.now()}-${safeName}`;
-      const { error: upErr } = await supabase.storage.from("chat-media").upload(path, fileBackup, {
-        contentType: fileBackup.type || "application/octet-stream",
-        upsert: false,
-      });
-      if (upErr) {
-        setSending(false);
-        toast.error("Upload gagal: " + upErr.message);
-        setText(textBackup); setPendingFile(fileBackup);
-        return;
-      }
-      media_path = path;
-      media_filename = safeName;
-    }
-
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fonnte-send`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ conversation_id: activeId, content, media_path, media_filename }),
+      body: JSON.stringify({ conversation_id: activeId, content }),
     });
     const json = await res.json();
     setSending(false);
-    if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); setPendingFile(fileBackup); return; }
+    if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); return; }
     if (user) {
       await supabase.from("activity_logs").insert({
         user_id: user.id, action: "reply_message",
         entity_type: "conversation", entity_id: activeId,
         metadata: {
           contact_name: active?.contact?.full_name, whatsapp: active?.contact?.whatsapp_number,
-          length: content.length, has_attachment: !!media_path,
+          length: content.length,
         },
       } as any);
     }
   }
 
-  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (f.size > 15 * 1024 * 1024) { toast.error("Maksimal 15MB"); return; }
-    setPendingFile(f);
-    setMode("reply");
-    e.target.value = "";
+  async function markUnread(convId: string) {
+    const current = conversations.find((c) => c.id === convId);
+    const next = (current?.unread_count || 0) > 0 ? 0 : 1;
+    setConversations((prev) => prev.map((c) => c.id === convId ? { ...c, unread_count: next } : c));
+    const { error } = await supabase.from("conversations").update({ unread_count: next }).eq("id", convId);
+    if (error) { toast.error(error.message); loadConversations(); return; }
+    toast.success(next > 0 ? "Ditandai belum dibaca" : "Ditandai sudah dibaca");
   }
+
+  function startLongPress(convId: string) {
+    longPressFired.current = false;
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      if (navigator.vibrate) navigator.vibrate(40);
+      markUnread(convId);
+    }, 550);
+  }
+  function cancelLongPress() {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+  }
+
 
   async function logAction(action: string, metadata: Record<string, any> = {}) {
     if (!user) return;
@@ -417,20 +409,36 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
               const sla = slaTone(c);
               const slaCls = sla === "ok" ? "border-l-emerald-500" : sla === "warn" ? "border-l-amber-500" : sla === "danger" ? "border-l-rose-500" : "border-l-transparent";
               return (
-                <button key={c.id} onClick={() => setActiveId(c.id)}
-                  className={cn("w-full text-left px-4 py-3 border-b border-l-4 hover:bg-accent/60 flex flex-col gap-1 transition-colors",
+                <button key={c.id}
+                  onClick={() => { if (longPressFired.current) { longPressFired.current = false; return; } setActiveId(c.id); }}
+                  onPointerDown={() => startLongPress(c.id)}
+                  onPointerUp={cancelLongPress}
+                  onPointerLeave={cancelLongPress}
+                  onPointerCancel={cancelLongPress}
+                  onContextMenu={(e) => { e.preventDefault(); markUnread(c.id); }}
+                  className={cn("w-full text-left px-4 py-3 border-b border-l-4 hover:bg-accent/60 flex flex-col gap-1 transition-colors select-none touch-none",
                     slaCls,
                     activeId === c.id && "bg-accent")}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-sm truncate">
                       {c.contact?.full_name || "Tanpa nama"}
                     </span>
-                    {c.unread_count > 0 && (
-                      <span className="text-[10px] bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 shrink-0 glow-primary">
-                        {c.unread_count}
+                    <span className="flex items-center gap-1 shrink-0">
+                      <span
+                        role="button"
+                        title={c.unread_count > 0 ? "Tandai sudah dibaca" : "Tandai belum dibaca (atau tahan)"}
+                        onClick={(e) => { e.stopPropagation(); markUnread(c.id); }}
+                        className="opacity-60 hover:opacity-100 p-1 rounded hover:bg-background/60 cursor-pointer">
+                        <MailOpen className="size-3" />
                       </span>
-                    )}
+                      {c.unread_count > 0 && (
+                        <span className="text-[10px] bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 glow-primary">
+                          {c.unread_count}
+                        </span>
+                      )}
+                    </span>
                   </div>
+
                   <div className="text-[11px] text-muted-foreground">{c.contact?.whatsapp_number}</div>
                   <div className="text-xs text-muted-foreground truncate">{c.last_message_preview || "—"}</div>
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -707,35 +715,18 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                       </div>
                     </>
                   )}
-                  {mode === "reply" && (
-                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1"
-                      onClick={() => fileInputRef.current?.click()}>
-                      <Paperclip className="size-3" /> Lampiran
-                    </Button>
-                  )}
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={onPickFile}
-                    accept="image/*,application/pdf,audio/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" />
                 </div>
-                {pendingFile && (
-                  <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg border bg-muted/40 text-xs">
-                    {pendingFile.type.startsWith("image/") ? <ImageIcon className="size-4 text-primary" /> : <FileText className="size-4 text-primary" />}
-                    <span className="truncate flex-1">{pendingFile.name}</span>
-                    <span className="text-muted-foreground">{(pendingFile.size / 1024).toFixed(0)} KB</span>
-                    <button type="button" onClick={() => setPendingFile(null)} className="text-muted-foreground hover:text-destructive">
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                )}
                 <div className="flex gap-2">
                   <Input value={text} onChange={(e) => setText(e.target.value)}
                     placeholder={mode === "note"
                       ? "Catatan internal — hanya dilihat agent..."
-                      : pendingFile ? "Caption (opsional)..." : `Balas sebagai ${agentName(user?.id || null)}...`}
+                      : `Balas sebagai ${agentName(user?.id || null)}...`}
                     disabled={sending}
                     className={mode === "note" ? "bg-amber-50 dark:bg-amber-500/10 border-amber-300" : ""}
                     autoFocus />
-                  <Button type="submit" disabled={sending || (!text.trim() && !pendingFile)}
+                  <Button type="submit" disabled={sending || !text.trim()}
                     className={mode === "note" ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}>
+
                     {sending ? <Loader2 className="size-4 animate-spin" /> :
                       mode === "note" ? <StickyNote className="size-4" /> : <Send className="size-4" />}
                   </Button>
