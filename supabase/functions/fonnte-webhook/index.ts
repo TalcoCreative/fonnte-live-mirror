@@ -98,8 +98,15 @@ Deno.serve(async (req) => {
 
     // ===== Outbound device mirror (fromMe = true) =====
     if (fromMe) {
+      // Reject mirror from a different device on the same Fonnte account
+      const expectedDev = settings.fonnte_device ? normalizePhone(settings.fonnte_device) : null;
+      if (expectedDev && deviceField) {
+        const dev = normalizePhone(String(deviceField));
+        if (dev && dev !== expectedDev) return json({ ok: true, skip: "mirror-other-device", device: dev, expected: expectedDev });
+      }
       // Echo guard: ignore messages we already saved (sent from inbox)
       if (hasWatermark) return json({ ok: true, skip: "watermark-echo" });
+
       const twoMinAgo = new Date(Date.now() - 2 * 60_000).toISOString();
       const { data: echoMatch } = await admin.from("messages").select("id")
         .eq("conversation_id", conv.id).eq("direction", "OUTBOUND")
