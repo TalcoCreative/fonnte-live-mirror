@@ -95,6 +95,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:title", content: "Husada CRM" },
       { name: "twitter:description", content: "CRM Rumah Sakit Husada terintegrasi WhatsApp Integration." },
       { name: "twitter:image", content: husadaLogo.url },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1955800a-d1a4-4e45-bde9-b36c84d2b772/id-preview-a4a81257--2ab9d484-1055-442e-acbe-220bbbd08361.lovable.app-1782710034403.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1955800a-d1a4-4e45-bde9-b36c84d2b772/id-preview-a4a81257--2ab9d484-1055-442e-acbe-220bbbd08361.lovable.app-1782710034403.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
