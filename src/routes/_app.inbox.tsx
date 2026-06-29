@@ -46,6 +46,7 @@ type ComposeMode = "reply" | "note";
 
 export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const { user } = useAuth();
+  const { isFirstResponse } = useRole();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
