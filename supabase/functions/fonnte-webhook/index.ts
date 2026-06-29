@@ -1,4 +1,4 @@
-// Public webhook receiver for Fonnte incoming messages
+// Public webhook receiver for Fonnte incoming messages — runs Dynamic Workflow
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -16,7 +16,7 @@ function normalizePhone(p: string): string {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method === "GET") return new Response("Fonnte webhook ready", { headers: corsHeaders });
+  if (req.method === "GET") return new Response("Webhook ready", { headers: corsHeaders });
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -34,11 +34,8 @@ Deno.serve(async (req) => {
       for (const [k, v] of fd.entries()) payload[k] = typeof v === "string" ? v : "";
     }
 
-    console.log("[fonnte-webhook] payload:", JSON.stringify(payload));
-
     const sender = payload.sender || payload.from || payload.number;
     const rawMessage = String(payload.message || payload.text || payload.body || "");
-    // Strip Fonnte watermark suffix ("\n\n> _Sent via fonnte.com_")
     const WATERMARK_RE = /\s*>?\s*_?Sent via fonnte\.com_?\s*$/i;
     const hasWatermark = /Sent via fonnte\.com/i.test(rawMessage);
     const message = rawMessage.replace(WATERMARK_RE, "").trim();
@@ -47,51 +44,27 @@ Deno.serve(async (req) => {
     const deviceField = payload.device || payload.device_number || null;
 
     if (!sender) return json({ ok: false, error: "no sender" }, 400);
-
-    // Skip Fonnte status callbacks (state: sent/delivered/read) — no message body
-    if (!rawMessage && (payload.state || payload.status)) {
-      return json({ ok: true, skip: "status-callback" });
-    }
-
-    // 1) Skip self-echo flags
-    if (payload.fromMe === true || payload.fromMe === "true" || payload.from_me === true || payload.fromme === true) {
-      return json({ ok: true, skip: "fromMe" });
-    }
-
-    // 1b) Watermark = our own outbound mirrored back by Fonnte sync. Always skip.
-    if (hasWatermark) {
-      console.log("[fonnte-webhook] skip watermark-echo");
-      return json({ ok: true, skip: "fonnte-watermark-echo" });
-    }
+    if (!rawMessage && (payload.state || payload.status)) return json({ ok: true, skip: "status-callback" });
+    if (payload.fromMe === true || payload.fromMe === "true" || payload.from_me === true || payload.fromme === true) return json({ ok: true, skip: "fromMe" });
+    if (hasWatermark) return json({ ok: true, skip: "watermark-echo" });
 
     const phone = normalizePhone(sender);
 
-    // 2) Skip echo by device number
-    const { data: settingsRows } = await admin
-      .from("system_settings").select("key,value")
-      .in("key", ["fonnte_device", "fonnte_api_key"]);
+    const { data: settingsRows } = await admin.from("system_settings").select("key,value")
+      .in("key", ["fonnte_device", "fonnte_api_key", "active_workflow_id"]);
     const settings: Record<string, string> = {};
     (settingsRows || []).forEach((r: any) => { settings[r.key] = r.value; });
     const deviceNumber = settings.fonnte_device ? normalizePhone(settings.fonnte_device) : null;
-    if (deviceNumber && phone === deviceNumber) {
-      return json({ ok: true, skip: "self-device" });
-    }
-    if (deviceField && normalizePhone(String(deviceField)) === phone) {
-      return json({ ok: true, skip: "device-equals-sender" });
-    }
+    if (deviceNumber && phone === deviceNumber) return json({ ok: true, skip: "self-device" });
+    if (deviceField && normalizePhone(String(deviceField)) === phone) return json({ ok: true, skip: "device-equals-sender" });
 
     let { data: contact } = await admin.from("contacts").select("*").eq("whatsapp_number", phone).maybeSingle();
-    const isExisting = !!contact;
 
     if (!contact) {
       const { data: defaultStage } = await admin.from("stages").select("id").eq("is_default", true).maybeSingle();
       const { data: newC } = await admin.from("contacts").insert({
-        whatsapp_number: phone,
-        full_name: waName,
-        stage_id: defaultStage?.id || null,
-        source: "whatsapp",
-        last_interaction_at: new Date().toISOString(),
-        total_messages: 0,
+        whatsapp_number: phone, full_name: waName, stage_id: defaultStage?.id || null,
+        source: "whatsapp", last_interaction_at: new Date().toISOString(), total_messages: 0,
       }).select().single();
       contact = newC!;
     } else if (!contact.full_name && waName) {
@@ -107,126 +80,214 @@ Deno.serve(async (req) => {
       conv = newConv!;
     }
 
-    // 3) Dedupe by message id (also covers retries from Fonnte)
     if (fonnteMsgId) {
-      const { data: dup } = await admin.from("messages").select("id")
-        .eq("fonnte_message_id", String(fonnteMsgId)).limit(1).maybeSingle();
-      if (dup) {
-        return json({ ok: true, skip: "duplicate-id" });
-      }
+      const { data: dup } = await admin.from("messages").select("id").eq("fonnte_message_id", String(fonnteMsgId)).limit(1).maybeSingle();
+      if (dup) return json({ ok: true, skip: "duplicate-id" });
     }
 
-    // 4) Dedupe by recent outbound content within 5 minutes (final safety)
     const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
-    const { data: echoMatch } = await admin
-      .from("messages").select("id")
+    const { data: echoMatch } = await admin.from("messages").select("id")
       .eq("conversation_id", conv.id).eq("direction", "OUTBOUND")
-      .eq("content", message).gte("sent_at", fiveMinAgo)
-      .limit(1).maybeSingle();
-    if (echoMatch) {
-      console.log("[fonnte-webhook] skip content-echo of outbound", echoMatch.id);
-      return json({ ok: true, skip: "echo-content" });
-    }
+      .eq("content", message).gte("sent_at", fiveMinAgo).limit(1).maybeSingle();
+    if (echoMatch) return json({ ok: true, skip: "echo-content" });
 
-    const insert: any = {
-      conversation_id: conv.id, direction: "INBOUND", type: "TEXT",
-      content: message, status: "DELIVERED",
-    };
+    const insert: any = { conversation_id: conv.id, direction: "INBOUND", type: "TEXT", content: message, status: "DELIVERED" };
     if (fonnteMsgId) insert.fonnte_message_id = String(fonnteMsgId);
-    const { error: msgErr } = await admin.from("messages").insert(insert);
-    if (msgErr && !msgErr.message.includes("duplicate")) console.error("msg insert err", msgErr);
+    await admin.from("messages").insert(insert);
 
-    const convUpdates: any = {
+    await admin.from("conversations").update({
       last_message_at: new Date().toISOString(),
       last_message_preview: message.slice(0, 100),
       unread_count: (conv.unread_count || 0) + 1,
-    };
-    if (!conv.first_inbound_at) convUpdates.first_inbound_at = new Date().toISOString();
-    await admin.from("conversations").update(convUpdates).eq("id", conv.id);
+      first_inbound_at: conv.first_inbound_at || new Date().toISOString(),
+    }).eq("id", conv.id);
 
     await admin.from("contacts").update({
       last_interaction_at: new Date().toISOString(),
       total_messages: (contact.total_messages || 0) + 1,
     }).eq("id", contact.id);
 
-    // Chatbot:
-    // - Brand new lead → run greet flow
-    // - Existing lead whose chat was deleted (chatbot_state IS NULL) → re-run flow, UPDATE existing fields in place
-    // - Existing lead with state 'done' → skip bot (agent handles)
-    // - Existing lead with a pending state → continue flow
-    if (contact.chatbot_state !== "done") {
-      await runChatbot(admin, contact, message, conv.id, settings.fonnte_api_key);
+    if (contact.chatbot_state !== "done" && settings.active_workflow_id) {
+      await runWorkflow(admin, contact, message, conv.id, settings.fonnte_api_key, settings.active_workflow_id);
     }
 
-    return json({ ok: true, contact_id: contact.id, conversation_id: conv.id });
+    return json({ ok: true });
   } catch (e) {
     console.error(e);
     return json({ ok: false, error: String(e) }, 500);
   }
 });
 
-async function runChatbot(admin: any, contact: any, message: string, convId: string, api_key?: string) {
-  const state = contact.chatbot_state;
-  const data = contact.chatbot_data || {};
-  let reply = "";
-  let nextState = state;
-  const updates: any = {};
+async function runWorkflow(admin: any, contact: any, message: string, convId: string, api_key: string | undefined, workflowId: string) {
+  const { data: wf } = await admin.from("workflows").select("id,status,is_enabled").eq("id", workflowId).maybeSingle();
+  if (!wf || wf.status !== "published" || !wf.is_enabled) return;
+  const { data: steps } = await admin.from("workflow_steps").select("*").eq("workflow_id", workflowId).order("position");
+  if (!steps?.length) return;
 
-  const { data: products } = await admin.from("products").select("id,name").eq("is_active", true).order("sort_order").limit(9);
-  const productList = (products || []).map((p: any, i: number) => `${i + 1}. ${p.name}`).join("\n");
+  let state = contact.chatbot_state as string | null;
+  const data = (contact.chatbot_data as any) || {};
+  const contactUpdates: any = {};
 
-  if (!state || state === "greet") {
-    reply = `Halo, selamat datang di Rumah Sakit Husada.\n\nMohon pilih layanan yang Anda butuhkan dengan mengetik angkanya:\n\n${productList}`;
-    nextState = "ask_product";
-  } else if (state === "ask_product") {
-    const idx = parseInt(message, 10);
-    if (Number.isInteger(idx) && products && idx >= 1 && idx <= products.length) {
-      updates.interested_product_id = products[idx - 1].id;
-      data.product_name = products[idx - 1].name;
-      reply = `Anda memilih: ${products[idx - 1].name}.\n\nMohon kirim nama lengkap Anda.`;
-      nextState = "ask_name";
-    } else {
-      reply = `Mohon balas dengan angka pilihan layanan:\n\n${productList}`;
+  // Find current step (the one we asked previously and now expect an answer for)
+  const findIndex = (id: string | null) => id ? steps.findIndex((s: any) => s.id === id) : -1;
+  let idx = findIndex(state);
+
+  // If user has active interactive step, validate and store the incoming message first
+  if (idx >= 0) {
+    const cur = steps[idx];
+    const result = await consumeAnswer(admin, cur, message);
+    if (!result.ok) {
+      await sendReply(admin, contact, convId, result.error || "Mohon coba lagi.", api_key);
+      return;
     }
-  } else if (state === "ask_name") {
-    const name = message.trim();
-    if (name.length < 2) {
-      reply = `Mohon kirim nama lengkap Anda (minimal 2 karakter).`;
-    } else {
-      updates.full_name = name;
-      reply = `Terima kasih, ${name}. Domisili Anda di kota mana?`;
-      nextState = "ask_domicile";
-    }
-  } else if (state === "ask_domicile") {
-    updates.domicile = message.trim();
-    reply = `Baik. Mohon ceritakan keluhan atau pertanyaan Anda secara singkat.`;
-    nextState = "ask_complaint";
-  } else if (state === "ask_complaint") {
-    updates.chief_complaint = message.trim();
-    reply = `Terima kasih atas informasinya. Data Anda telah kami terima dan tim agent Rumah Sakit Husada akan segera membalas Anda. Mohon menunggu sebentar.`;
-    nextState = "done";
+    data[cur.id] = result.value;
+    if (cur.mapping) applyMapping(contactUpdates, cur.mapping, result.value);
+    idx = idx + 1; // move past current
+  } else {
+    idx = 0; // start from beginning
   }
 
-  updates.chatbot_state = nextState;
-  updates.chatbot_data = data;
-  await admin.from("contacts").update(updates).eq("id", contact.id);
+  // Execute auto-steps (messages) until we hit an interactive step or end
+  while (idx < steps.length) {
+    const step = steps[idx];
 
-  if (reply && api_key) {
-    const fd = new FormData();
-    fd.append("target", contact.whatsapp_number);
-    fd.append("message", reply);
-    try {
-      const fres = await fetch("https://api.fonnte.com/send", { method: "POST", headers: { Authorization: api_key }, body: fd });
-      const fdata = await fres.json().catch(() => ({}));
-      const fonnteId = Array.isArray(fdata.id) ? String(fdata.id[0]) : (fdata.id ? String(fdata.id) : null);
-      await admin.from("messages").insert({
-        conversation_id: convId, direction: "OUTBOUND", type: "TEXT",
-        content: reply, status: "SENT", fonnte_message_id: fonnteId,
+    if (step.type === "conditional") {
+      const branch = (step.config?.branches || []).find((b: any) => {
+        const ans = String(data[b.if_step_id] ?? "");
+        if (b.op === "contains") return ans.toLowerCase().includes(String(b.value || "").toLowerCase());
+        return ans.toLowerCase() === String(b.value || "").toLowerCase();
       });
-      await admin.from("conversations").update({
-        last_message_at: new Date().toISOString(),
-        last_message_preview: reply.slice(0, 100),
-      }).eq("id", convId);
-    } catch (e) { console.error("chatbot send fail", e); }
+      if (branch?.goto_step_id) { idx = findIndex(branch.goto_step_id); if (idx < 0) break; }
+      else { idx++; }
+      continue;
+    }
+
+    if (step.type === "message") {
+      const text = await renderPrompt(admin, step, data);
+      await sendReply(admin, contact, convId, text, api_key);
+      idx++; continue;
+    }
+
+    if (step.type === "closing") {
+      const text = await renderPrompt(admin, step, data);
+      await sendReply(admin, contact, convId, text, api_key);
+      contactUpdates.chatbot_state = "done";
+      contactUpdates.chatbot_data = data;
+      await admin.from("contacts").update(contactUpdates).eq("id", contact.id);
+      return;
+    }
+
+    // Interactive step — send prompt and wait
+    const prompt = await renderPrompt(admin, step, data);
+    await sendReply(admin, contact, convId, prompt, api_key);
+    contactUpdates.chatbot_state = step.id;
+    contactUpdates.chatbot_data = data;
+    await admin.from("contacts").update(contactUpdates).eq("id", contact.id);
+    return;
+  }
+
+  // End of flow with no explicit closing
+  contactUpdates.chatbot_state = "done";
+  contactUpdates.chatbot_data = data;
+  await admin.from("contacts").update(contactUpdates).eq("id", contact.id);
+}
+
+function applyMapping(updates: any, mapping: string, value: any) {
+  const [table, field] = mapping.split(".");
+  if (table !== "contacts" || !field) return;
+  if (field === "age") {
+    const n = parseInt(String(value), 10); if (Number.isFinite(n)) updates[field] = n;
+  } else {
+    updates[field] = value;
+  }
+}
+
+async function renderPrompt(admin: any, step: any, _data: any): Promise<string> {
+  let text = step.prompt || step.label || "";
+  const meta = step.config || {};
+  if ((step.type === "dropdown" || step.type === "radio" || step.type === "checkbox") && meta.source !== "products") {
+    const opts: string[] = meta.options || [];
+    text += "\n\n" + opts.map((o, i) => `${i + 1}. ${o}`).join("\n");
+    if (step.type === "checkbox") text += "\n\n(Boleh pilih lebih dari satu, pisahkan dengan koma — contoh: 1,3)";
+  }
+  if ((step.type === "dropdown" || step.type === "radio") && meta.source === "products") {
+    const { data: products } = await admin.from("products").select("id,name").eq("is_active", true).order("sort_order").limit(20);
+    text += "\n\n" + (products || []).map((p: any, i: number) => `${i + 1}. ${p.name}`).join("\n");
+  }
+  return text;
+}
+
+async function consumeAnswer(admin: any, step: any, message: string): Promise<{ ok: boolean; value?: any; error?: string }> {
+  const cfg = step.config || {};
+  const msg = message.trim();
+  if (!msg) return { ok: false, error: "Mohon kirim jawaban Anda." };
+
+  switch (step.type) {
+    case "input_text":
+    case "textarea":
+      return { ok: true, value: msg };
+    case "email":
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(msg)) return { ok: false, error: "Format email tidak valid. Mohon kirim ulang." };
+      return { ok: true, value: msg.toLowerCase() };
+    case "phone":
+      if (!/^[+\d][\d\s\-]{6,}$/.test(msg)) return { ok: false, error: "Nomor telepon tidak valid." };
+      return { ok: true, value: msg };
+    case "number": {
+      const n = Number(msg.replace(/[^\d.-]/g, ""));
+      if (!Number.isFinite(n)) return { ok: false, error: "Mohon kirim angka." };
+      return { ok: true, value: n };
+    }
+    case "date":
+      if (!/\d{1,4}[\/\-]\d{1,2}([\/\-]\d{1,4})?/.test(msg)) return { ok: false, error: "Format tanggal tidak dikenali (contoh: 25/12/2025)." };
+      return { ok: true, value: msg };
+    case "file":
+      return { ok: true, value: msg }; // accept any text/url
+    case "dropdown":
+    case "radio": {
+      let options: { id?: string; name: string }[] = [];
+      if (cfg.source === "products") {
+        const { data: products } = await admin.from("products").select("id,name").eq("is_active", true).order("sort_order").limit(20);
+        options = (products || []).map((p: any) => ({ id: p.id, name: p.name }));
+      } else {
+        options = (cfg.options || []).map((o: string) => ({ name: o }));
+      }
+      const idx = parseInt(msg, 10);
+      if (!Number.isInteger(idx) || idx < 1 || idx > options.length) {
+        return { ok: false, error: `Mohon balas dengan angka 1 - ${options.length}.` };
+      }
+      const pick = options[idx - 1];
+      return { ok: true, value: pick.id || pick.name };
+    }
+    case "checkbox": {
+      const options: string[] = cfg.options || [];
+      const picks = msg.split(/[,\s]+/).map((x) => parseInt(x, 10)).filter((n) => Number.isInteger(n) && n >= 1 && n <= options.length);
+      if (!picks.length) return { ok: false, error: `Mohon kirim nomor pilihan, contoh: 1,3` };
+      return { ok: true, value: picks.map((i) => options[i - 1]).join(", ") };
+    }
+    default:
+      return { ok: true, value: msg };
+  }
+}
+
+async function sendReply(admin: any, contact: any, convId: string, text: string, api_key?: string) {
+  if (!text) return;
+  if (!api_key) { console.warn("no api_key, skip send"); return; }
+  const fd = new FormData();
+  fd.append("target", contact.whatsapp_number);
+  fd.append("message", text);
+  try {
+    const fres = await fetch("https://api.fonnte.com/send", { method: "POST", headers: { Authorization: api_key }, body: fd });
+    const fdata = await fres.json().catch(() => ({}));
+    const fonnteId = Array.isArray(fdata.id) ? String(fdata.id[0]) : (fdata.id ? String(fdata.id) : null);
+    await admin.from("messages").insert({
+      conversation_id: convId, direction: "OUTBOUND", type: "TEXT",
+      content: text, status: "SENT", fonnte_message_id: fonnteId,
+    });
+    await admin.from("conversations").update({
+      last_message_at: new Date().toISOString(),
+      last_message_preview: text.slice(0, 100),
+    }).eq("id", convId);
+  } catch (e) {
+    console.error("send err", e);
   }
 }
