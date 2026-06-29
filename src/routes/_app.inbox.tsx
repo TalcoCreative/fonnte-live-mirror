@@ -325,9 +325,32 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
               <Search className="size-4 absolute left-2.5 top-2.5 text-muted-foreground" />
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kontak..." className="pl-8" />
             </div>
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+                <SelectTrigger className="h-7 text-[11px] flex-1 min-w-[110px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Terbaru</SelectItem>
+                  <SelectItem value="oldest">Terlama</SelectItem>
+                  <SelectItem value="unread">Belum dibaca</SelectItem>
+                  <SelectItem value="name_asc">Nama A-Z</SelectItem>
+                  <SelectItem value="name_desc">Nama Z-A</SelectItem>
+                </SelectContent>
+              </Select>
+              <button onClick={() => setFilterUnread((v) => !v)}
+                className={cn("text-[10px] px-2 py-1 rounded-md border transition-colors",
+                  filterUnread ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent")}>
+                Unread
+              </button>
+              <button onClick={() => setFilterUnassigned((v) => !v)}
+                className={cn("text-[10px] px-2 py-1 rounded-md border transition-colors",
+                  filterUnassigned ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent")}>
+                Belum assign
+              </button>
+            </div>
             <div className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
               <span className="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live · {conversations.length} percakapan
+              Live · {filtered.length}/{conversations.length} percakapan
+              {isFirstResponse && <span className="ml-2 px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300">FR Mode</span>}
             </div>
           </div>
           <div className="flex-1 overflow-auto">
