@@ -163,7 +163,7 @@ function WorkflowEditor({ workflow, onBack }: { workflow: Workflow; onBack: () =
   const [wf, setWf] = useState<Workflow>(workflow);
   const [steps, setSteps] = useState<Step[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const isLocked = wf.status === "published";
+  const isLocked = false; // Workflow dapat diedit langsung (live), termasuk yang sudah published
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
