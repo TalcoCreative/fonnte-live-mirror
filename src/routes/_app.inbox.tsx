@@ -60,6 +60,8 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   const [mode, setMode] = useState<ComposeMode>("reply");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   async function loadConversations() {
@@ -194,13 +196,14 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
 
   async function sendMessage(payload?: string) {
     const content = (payload ?? text).trim();
-    if (!content || !activeId) return;
+    if ((!content && !pendingFile) || !activeId) return;
     setSending(true);
     const textBackup = content;
+    const fileBackup = pendingFile;
     setText("");
+    setPendingFile(null);
 
     if (mode === "note") {
-      // Internal note: insert directly, never sent via WhatsApp gateway
       const { error } = await supabase.from("messages").insert({
         conversation_id: activeId,
         direction: "OUTBOUND",
@@ -215,26 +218,54 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       return;
     }
 
+    // Upload attachment first (if any)
+    let media_path: string | undefined;
+    let media_filename: string | undefined;
+    if (fileBackup) {
+      const safeName = fileBackup.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${activeId}/${Date.now()}-${safeName}`;
+      const { error: upErr } = await supabase.storage.from("chat-media").upload(path, fileBackup, {
+        contentType: fileBackup.type || "application/octet-stream",
+        upsert: false,
+      });
+      if (upErr) {
+        setSending(false);
+        toast.error("Upload gagal: " + upErr.message);
+        setText(textBackup); setPendingFile(fileBackup);
+        return;
+      }
+      media_path = path;
+      media_filename = safeName;
+    }
+
     const { data: { session } } = await supabase.auth.getSession();
     const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fonnte-send`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ conversation_id: activeId, content }),
+      body: JSON.stringify({ conversation_id: activeId, content, media_path, media_filename }),
     });
     const json = await res.json();
     setSending(false);
-    if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); return; }
-    // Log reply
+    if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); setPendingFile(fileBackup); return; }
     if (user) {
       await supabase.from("activity_logs").insert({
         user_id: user.id, action: "reply_message",
         entity_type: "conversation", entity_id: activeId,
         metadata: {
           contact_name: active?.contact?.full_name, whatsapp: active?.contact?.whatsapp_number,
-          length: content.length,
+          length: content.length, has_attachment: !!media_path,
         },
       } as any);
     }
+  }
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 15 * 1024 * 1024) { toast.error("Maksimal 15MB"); return; }
+    setPendingFile(f);
+    setMode("reply");
+    e.target.value = "";
   }
 
   async function logAction(action: string, metadata: Record<string, any> = {}) {
