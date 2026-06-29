@@ -55,6 +55,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [stages, setStages] = useState<Stage[]>([]);
   const [agents, setAgents] = useState<Profile[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [deviceLabel, setDeviceLabel] = useState<string>("");
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [search, setSearch] = useState("");
   const [sending, setSending] = useState(false);
