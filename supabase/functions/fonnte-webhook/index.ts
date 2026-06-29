@@ -134,6 +134,12 @@ Deno.serve(async (req) => {
     const deviceNumber = settings.fonnte_device ? normalizePhone(settings.fonnte_device) : null;
     if (deviceNumber && contactNumber === deviceNumber) return json({ ok: true, skip: "self-device" });
     if (deviceField && normalizePhone(String(deviceField)) === contactNumber) return json({ ok: true, skip: "device-equals-sender" });
+    // Reject events from other devices on the same Fonnte account
+    if (deviceNumber && deviceField) {
+      const dev = normalizePhone(String(deviceField));
+      if (dev && dev !== deviceNumber) return json({ ok: true, skip: "other-device", device: dev, expected: deviceNumber });
+    }
+
 
     // Echo content guard for inbound (rare but possible)
     const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
