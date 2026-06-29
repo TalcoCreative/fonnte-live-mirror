@@ -33,6 +33,7 @@ function AppLayout() {
   const [profileName, setProfileName] = useState<string>("");
   const [mobileOpen, setMobileOpen] = useState(false);
   usePushNotifications(!!user);
+  const { role } = useRole();
 
   useEffect(() => {
     if (!loading && !user) router.navigate({ to: "/auth" });
