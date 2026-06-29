@@ -289,12 +289,23 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
 function applyMapping(updates: any, mapping: string, value: any) {
   const [table, field] = mapping.split(".");
   if (table !== "contacts" || !field) return;
-  if (field === "age") {
-    const n = parseInt(String(value), 10); if (Number.isFinite(n)) updates[field] = n;
-  } else {
-    updates[field] = value;
+  const NUMERIC = new Set(["age", "estimated_revenue"]);
+  const UUID = new Set(["interested_product_id"]);
+  if (NUMERIC.has(field)) {
+    const n = Number(String(value).replace(/[^\d.-]/g, ""));
+    if (Number.isFinite(n)) updates[field] = n;
+    return;
   }
+  if (UUID.has(field)) {
+    const s = String(value || "").trim();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) {
+      updates[field] = s;
+    }
+    return;
+  }
+  updates[field] = value;
 }
+
 
 async function renderPrompt(admin: any, step: any, _data: any): Promise<string> {
   let text = step.prompt || step.label || "";
