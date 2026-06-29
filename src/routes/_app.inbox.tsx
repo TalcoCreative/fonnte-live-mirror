@@ -464,6 +464,17 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                       </Select>
                     </div>
                     <div className="flex items-center gap-1.5">
+                      <Package className="size-3.5 text-muted-foreground" />
+                      <Select value={active.contact?.interested_product_id || "none"}
+                        onValueChange={(v) => changeProduct(v === "none" ? null : v)}>
+                        <SelectTrigger className="h-8 w-[150px] text-xs"><SelectValue placeholder="Produk" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Tanpa produk</SelectItem>
+                          {products.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <UserIcon className="size-3.5 text-muted-foreground" />
                       <Select value={active.assigned_agent_id || "unassigned"}
                         onValueChange={(v) => assignAgent(v === "unassigned" ? null : v)}>
