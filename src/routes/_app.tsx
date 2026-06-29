@@ -52,6 +52,8 @@ function AppLayout() {
     return <div className="flex h-screen items-center justify-center text-muted-foreground">Memuat...</div>;
   }
 
+  const { role } = useRole();
+  const navItems = ALL_NAV.filter((i) => !i.roles || (role && i.roles.includes(role)));
   const crucialItems = navItems.filter((i) => i.crucial);
 
   return (
