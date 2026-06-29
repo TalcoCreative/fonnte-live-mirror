@@ -422,12 +422,13 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved 
           ) : (
             <ol className="relative border-l border-border ml-2 space-y-3">
               {logs.map((l) => (
-                <li key={l.id} className="ml-4">
+                <li key={`${l._src}-${l.id}`} className="ml-4">
                   <div className="absolute -left-1.5 size-3 rounded-full bg-primary glow-primary" />
-                  <div className="text-xs text-muted-foreground">{new Date(l.created_at).toLocaleString("id-ID")}</div>
+                  <div className="text-xs text-muted-foreground">{new Date(l._ts || l.created_at).toLocaleString("id-ID")}</div>
                   <div className="text-sm">{actionLabel(l)}</div>
                 </li>
               ))}
+
             </ol>
           )}
         </div>
