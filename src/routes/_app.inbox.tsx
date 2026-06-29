@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { useAuth } from "@/hooks/use-auth";
+import { useRole } from "@/hooks/use-role";
 
 export const Route = createFileRoute("/_app/inbox")({
   head: () => ({ meta: [{ title: "Inbox — Husada CRM" }] }),
