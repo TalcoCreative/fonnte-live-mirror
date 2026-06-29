@@ -24,7 +24,7 @@ function SettingsPage() {
   const tabs = [
     { v: "gateway", label: "WhatsApp Gateway" },
     { v: "flow", label: "Bot Workflow" },
-    { v: "pipeline", label: "Pipeline" },
+    { v: "categories", label: "Kategori Pertanyaan" },
     { v: "quick", label: "Quick Replies" },
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
@@ -53,7 +53,7 @@ function SettingsPage() {
       <div>
         {tab === "gateway" && <FonnteTab />}
         {tab === "flow" && <WorkflowBuilderTab />}
-        {tab === "pipeline" && <WorkflowTab />}
+        {tab === "categories" && <CategoriesTab />}
         {tab === "quick" && <QuickRepliesTab />}
         {tab === "products" && <ProductsTab />}
         {tab === "team" && <TeamTab />}
@@ -61,6 +61,80 @@ function SettingsPage() {
         {tab === "webhook" && <WebhookTab />}
       </div>
 
+    </div>
+  );
+}
+
+function CategoriesTab() {
+  const DEFAULTS = ["Layanan", "Tindakan", "Administratif", "Rawat Jalan", "Rawat Inap", "Laboratorium", "Medical Check Up", "Asuransi", "BPJS", "Lainnya"];
+  const [items, setItems] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("system_settings").select("value").eq("key", "question_categories").maybeSingle();
+      let parsed: string[] = [];
+      if (data?.value) {
+        try { parsed = JSON.parse(data.value); } catch { parsed = []; }
+      }
+      setItems(Array.isArray(parsed) && parsed.length ? parsed : DEFAULTS);
+      setLoading(false);
+    })();
+  }, []);
+
+  async function save(next: string[]) {
+    setSaving(true);
+    const clean = next.map((s) => s.trim()).filter(Boolean);
+    const { error } = await supabase.from("system_settings").upsert({ key: "question_categories", value: JSON.stringify(clean) }, { onConflict: "key" });
+    setSaving(false);
+    if (error) toast.error(error.message); else toast.success("Kategori disimpan");
+  }
+
+  function update(i: number, v: string) { setItems(items.map((x, idx) => (idx === i ? v : x))); }
+  function remove(i: number) { const next = items.filter((_, idx) => idx !== i); setItems(next); save(next); }
+  function add() { setItems([...items, "Kategori Baru"]); }
+  function move(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= items.length) return;
+    const next = [...items]; [next[i], next[j]] = [next[j], next[i]];
+    setItems(next); save(next);
+  }
+  function resetDefaults() { setItems(DEFAULTS); save(DEFAULTS); }
+
+  if (loading) return <div className="mt-4 text-sm text-muted-foreground">Memuat…</div>;
+
+  return (
+    <div className="space-y-4 mt-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Kategori Pertanyaan</CardTitle>
+          <CardDescription>
+            Daftar kategori yang ditampilkan ke pelanggan saat menanyakan "Pilih kategori pertanyaan Anda" (1, 2, 3, …). Bisa ditambah, diubah, dihapus, dan diurutkan.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {items.map((it, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-7 text-center text-xs font-mono text-muted-foreground">{i + 1}.</span>
+              <Input value={it} onChange={(e) => update(i, e.target.value)} onBlur={() => save(items)} />
+              <Button type="button" variant="outline" size="sm" onClick={() => move(i, -1)} disabled={i === 0}>↑</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => move(i, 1)} disabled={i === items.length - 1}>↓</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => remove(i)} className="text-rose-600">Hapus</Button>
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button type="button" onClick={add}>Tambah Kategori</Button>
+            <Button type="button" variant="outline" onClick={() => save(items)} disabled={saving}>
+              {saving ? "Menyimpan…" : "Simpan Semua"}
+            </Button>
+            <Button type="button" variant="ghost" onClick={resetDefaults} className="ml-auto">Reset ke default</Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground pt-2">
+            Tip: hubungkan daftar ini di tab <strong>Bot Workflow</strong> sebagai opsi pilihan kategori. Perubahan disimpan otomatis saat berpindah dari kolom input.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

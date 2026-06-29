@@ -625,16 +625,13 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                   // Attribute outbound to the message sender; if missing, fall back to conv's assigned/last replier
                   const fallbackAgent = active.assigned_agent_id || active.last_replied_by_id || null;
                   const effectiveAgentId = m.sent_by_id || fallbackAgent;
-                  const isMirror = out && !m.sent_by_id; // sent from physical WA device
                   const senderLabel = out
-                    ? (effectiveAgentId ? agentName(effectiveAgentId) : (deviceLabel || "Agent"))
+                    ? (effectiveAgentId ? agentName(effectiveAgentId) : "Sistem")
                     : (active.contact?.full_name || "Pelanggan");
                   return (
                     <div key={m.id} className={cn("flex flex-col gap-0.5", out ? "items-end" : "items-start")}>
-                      <span className={cn("text-[10px] px-1 flex items-center gap-1",
-                        isMirror ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
-                        {isMirror && <Smartphone className="size-2.5" />}
-                        {senderLabel}{isMirror && " · via HP"}
+                      <span className="text-[10px] px-1 text-muted-foreground">
+                        {senderLabel}
                       </span>
                       <div className={cn("max-w-[75%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words shadow-sm",
                         out ? "bg-chat-out text-chat-out-foreground rounded-br-sm"
