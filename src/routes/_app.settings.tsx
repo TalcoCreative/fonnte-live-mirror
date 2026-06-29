@@ -463,6 +463,7 @@ function TeamTab() {
               <select value={role} onChange={(e) => setRole(e.target.value)}
                 className="w-full h-10 px-3 rounded-md border bg-background text-sm">
                 <option value="agent">Agent</option>
+                <option value="first_response">First Response Agent</option>
                 <option value="admin">Admin</option>
                 <option value="super_admin">Super Admin</option>
               </select>
