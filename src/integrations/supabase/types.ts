@@ -19,30 +19,110 @@ export type Database = {
           action: string
           created_at: string
           entity_id: string | null
+          entity_label: string | null
           entity_type: string | null
           id: string
           metadata: Json | null
+          new_value: Json | null
+          old_value: Json | null
           user_id: string | null
         }
         Insert: {
           action: string
           created_at?: string
           entity_id?: string | null
+          entity_label?: string | null
           entity_type?: string | null
           id?: string
           metadata?: Json | null
+          new_value?: Json | null
+          old_value?: Json | null
           user_id?: string | null
         }
         Update: {
           action?: string
           created_at?: string
           entity_id?: string | null
+          entity_label?: string | null
           entity_type?: string | null
           id?: string
           metadata?: Json | null
+          new_value?: Json | null
+          old_value?: Json | null
           user_id?: string | null
         }
         Relationships: []
+      }
+      audit_events: {
+        Row: {
+          actor_id: string | null
+          contact_id: string | null
+          conversation_id: string | null
+          event_type: string
+          id: string
+          metadata: Json | null
+          new_value: Json | null
+          occurred_at: string
+          old_value: Json | null
+          product_id: string | null
+          stage_id: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          new_value?: Json | null
+          occurred_at?: string
+          old_value?: Json | null
+          product_id?: string | null
+          stage_id?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          contact_id?: string | null
+          conversation_id?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          new_value?: Json | null
+          occurred_at?: string
+          old_value?: Json | null
+          product_id?: string | null
+          stage_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_events_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_events_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_events_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_events_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "stages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contacts: {
         Row: {
@@ -142,6 +222,7 @@ export type Database = {
           last_message_at: string | null
           last_message_preview: string | null
           last_replied_by_id: string | null
+          priority: string
           status: Database["public"]["Enums"]["conversation_status"]
           unread_count: number
           updated_at: string
@@ -156,6 +237,7 @@ export type Database = {
           last_message_at?: string | null
           last_message_preview?: string | null
           last_replied_by_id?: string | null
+          priority?: string
           status?: Database["public"]["Enums"]["conversation_status"]
           unread_count?: number
           updated_at?: string
@@ -170,6 +252,7 @@ export type Database = {
           last_message_at?: string | null
           last_message_preview?: string | null
           last_replied_by_id?: string | null
+          priority?: string
           status?: Database["public"]["Enums"]["conversation_status"]
           unread_count?: number
           updated_at?: string
@@ -274,6 +357,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          division: string | null
           email: string | null
           full_name: string | null
           id: string
@@ -281,12 +365,14 @@ export type Database = {
           last_seen_at: string | null
           phone: string | null
           position: string | null
+          shift_id: string | null
           updated_at: string
           whatsapp_number: string | null
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          division?: string | null
           email?: string | null
           full_name?: string | null
           id: string
@@ -294,12 +380,14 @@ export type Database = {
           last_seen_at?: string | null
           phone?: string | null
           position?: string | null
+          shift_id?: string | null
           updated_at?: string
           whatsapp_number?: string | null
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
+          division?: string | null
           email?: string | null
           full_name?: string | null
           id?: string
@@ -307,8 +395,50 @@ export type Database = {
           last_seen_at?: string | null
           phone?: string | null
           position?: string | null
+          shift_id?: string | null
           updated_at?: string
           whatsapp_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shifts: {
+        Row: {
+          color: string
+          created_at: string
+          end_time: string
+          id: string
+          is_active: boolean
+          name: string
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          end_time: string
+          id?: string
+          is_active?: boolean
+          name: string
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          start_time?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -429,7 +559,7 @@ export type Database = {
       is_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      app_role: "super_admin" | "admin" | "agent"
+      app_role: "super_admin" | "admin" | "agent" | "first_response"
       conversation_status: "OPEN" | "PENDING" | "RESOLVED"
       message_direction: "INBOUND" | "OUTBOUND"
       message_status: "PENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED"
@@ -561,7 +691,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["super_admin", "admin", "agent"],
+      app_role: ["super_admin", "admin", "agent", "first_response"],
       conversation_status: ["OPEN", "PENDING", "RESOLVED"],
       message_direction: ["INBOUND", "OUTBOUND"],
       message_status: ["PENDING", "SENT", "DELIVERED", "READ", "FAILED"],

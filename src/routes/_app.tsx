@@ -8,20 +8,22 @@ import {
 import { cn } from "@/lib/utils";
 import husadaLogo from "@/assets/husada-logo-v2.png.asset.json";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { useRole, type AppRole } from "@/hooks/use-role";
 
 export const Route = createFileRoute("/_app")({
   component: AppLayout,
 });
 
-const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, crucial: false },
+type NavItem = { to: string; label: string; icon: any; crucial: boolean; roles?: AppRole[] };
+const ALL_NAV: NavItem[] = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, crucial: false, roles: ["super_admin", "admin", "agent", "first_response"] },
   { to: "/inbox", label: "Inbox", icon: MessageSquare, crucial: true },
   { to: "/my-inbox", label: "My Inbox", icon: Inbox, crucial: false },
-  { to: "/leads", label: "Leads", icon: Users, crucial: true },
-  { to: "/my-leads", label: "My Leads", icon: UserCircle2, crucial: false },
-  { to: "/broadcast", label: "Broadcast", icon: Send, crucial: false },
-  { to: "/activity", label: "Log", icon: Activity, crucial: false },
-  { to: "/settings", label: "Settings", icon: Settings, crucial: false },
+  { to: "/leads", label: "Leads", icon: Users, crucial: true, roles: ["super_admin", "admin", "agent"] },
+  { to: "/my-leads", label: "My Leads", icon: UserCircle2, crucial: false, roles: ["super_admin", "admin", "agent"] },
+  { to: "/broadcast", label: "Broadcast", icon: Send, crucial: false, roles: ["super_admin", "admin", "agent"] },
+  { to: "/activity", label: "Log", icon: Activity, crucial: false, roles: ["super_admin", "admin"] },
+  { to: "/settings", label: "Settings", icon: Settings, crucial: false, roles: ["super_admin", "admin"] },
 ];
 
 function AppLayout() {
@@ -31,6 +33,7 @@ function AppLayout() {
   const [profileName, setProfileName] = useState<string>("");
   const [mobileOpen, setMobileOpen] = useState(false);
   usePushNotifications(!!user);
+  const { role } = useRole();
 
   useEffect(() => {
     if (!loading && !user) router.navigate({ to: "/auth" });
@@ -50,6 +53,7 @@ function AppLayout() {
     return <div className="flex h-screen items-center justify-center text-muted-foreground">Memuat...</div>;
   }
 
+  const navItems = ALL_NAV.filter((i) => !i.roles || (role && i.roles.includes(role)));
   const crucialItems = navItems.filter((i) => i.crucial);
 
   return (

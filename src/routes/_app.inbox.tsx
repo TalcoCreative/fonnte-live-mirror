@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { useAuth } from "@/hooks/use-auth";
+import { useRole } from "@/hooks/use-role";
 
 export const Route = createFileRoute("/_app/inbox")({
   head: () => ({ meta: [{ title: "Inbox — Husada CRM" }] }),
@@ -45,6 +46,7 @@ type ComposeMode = "reply" | "note";
 
 export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const { user } = useAuth();
+  const { isFirstResponse } = useRole();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -138,12 +140,52 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  const [sortBy, setSortBy] = useState<"recent" | "oldest" | "unread" | "name_asc" | "name_desc">("recent");
+  const [filterUnread, setFilterUnread] = useState(false);
+  const [filterUnassigned, setFilterUnassigned] = useState(false);
+
+  // FR Agent: lock to "Leads Masuk" + "First Response" stages only
+  const allowedStageIds = useMemo(() => {
+    if (!isFirstResponse) return null;
+    return new Set(
+      stages.filter((s) => /leads masuk|first response/i.test(s.name)).map((s) => s.id),
+    );
+  }, [stages, isFirstResponse]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return conversations.filter((c) => !q ||
+    let list = conversations.filter((c) => !q ||
       c.contact?.full_name?.toLowerCase().includes(q) ||
       c.contact?.whatsapp_number?.includes(q));
-  }, [conversations, search]);
+    if (allowedStageIds) {
+      list = list.filter((c) => c.contact?.stage_id && allowedStageIds.has(c.contact.stage_id));
+    }
+    if (filterUnread) list = list.filter((c) => (c.unread_count || 0) > 0);
+    if (filterUnassigned) list = list.filter((c) => !c.assigned_agent_id);
+    const ts = (c: Conversation) => c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
+    const nm = (c: Conversation) => (c.contact?.full_name || c.contact?.whatsapp_number || "").toLowerCase();
+    list = [...list].sort((a, b) => {
+      switch (sortBy) {
+        case "oldest": return ts(a) - ts(b);
+        case "unread": return (b.unread_count || 0) - (a.unread_count || 0) || ts(b) - ts(a);
+        case "name_asc": return nm(a).localeCompare(nm(b));
+        case "name_desc": return nm(b).localeCompare(nm(a));
+        default: return ts(b) - ts(a);
+      }
+    });
+    return list;
+  }, [conversations, search, allowedStageIds, filterUnread, filterUnassigned, sortBy]);
+
+  // SLA badge color based on minutes since last inbound when unread
+  function slaTone(c: Conversation): "ok" | "warn" | "danger" | null {
+    if (!c.unread_count) return null;
+    const ts = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
+    if (!ts) return null;
+    const mins = (Date.now() - ts) / 60000;
+    if (mins < 5) return "ok";
+    if (mins < 10) return "warn";
+    return "danger";
+  }
 
   const active = conversations.find((c) => c.id === activeId);
   const activeProductName = active?.contact?.interested_product_id
@@ -283,9 +325,32 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
               <Search className="size-4 absolute left-2.5 top-2.5 text-muted-foreground" />
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari kontak..." className="pl-8" />
             </div>
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+                <SelectTrigger className="h-7 text-[11px] flex-1 min-w-[110px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Terbaru</SelectItem>
+                  <SelectItem value="oldest">Terlama</SelectItem>
+                  <SelectItem value="unread">Belum dibaca</SelectItem>
+                  <SelectItem value="name_asc">Nama A-Z</SelectItem>
+                  <SelectItem value="name_desc">Nama Z-A</SelectItem>
+                </SelectContent>
+              </Select>
+              <button onClick={() => setFilterUnread((v) => !v)}
+                className={cn("text-[10px] px-2 py-1 rounded-md border transition-colors",
+                  filterUnread ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent")}>
+                Unread
+              </button>
+              <button onClick={() => setFilterUnassigned((v) => !v)}
+                className={cn("text-[10px] px-2 py-1 rounded-md border transition-colors",
+                  filterUnassigned ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent")}>
+                Belum assign
+              </button>
+            </div>
             <div className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
               <span className="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live · {conversations.length} percakapan
+              Live · {filtered.length}/{conversations.length} percakapan
+              {isFirstResponse && <span className="ml-2 px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300">FR Mode</span>}
             </div>
           </div>
           <div className="flex-1 overflow-auto">
@@ -296,9 +361,12 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
             )}
             {filtered.map((c) => {
               const stage = stages.find((s) => s.id === c.contact?.stage_id);
+              const sla = slaTone(c);
+              const slaCls = sla === "ok" ? "border-l-emerald-500" : sla === "warn" ? "border-l-amber-500" : sla === "danger" ? "border-l-rose-500" : "border-l-transparent";
               return (
                 <button key={c.id} onClick={() => setActiveId(c.id)}
-                  className={cn("w-full text-left px-4 py-3 border-b hover:bg-accent/60 flex flex-col gap-1 transition-colors",
+                  className={cn("w-full text-left px-4 py-3 border-b border-l-4 hover:bg-accent/60 flex flex-col gap-1 transition-colors",
+                    slaCls,
                     activeId === c.id && "bg-accent")}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-sm truncate">
