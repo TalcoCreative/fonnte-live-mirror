@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
     }).eq("id", contact.id);
 
     if (contact.chatbot_state !== "done" && settings.active_workflow_id && message) {
-      await runWorkflow(admin, contact, message, conv.id, settings.fonnte_api_key, settings.active_workflow_id);
+      await runWorkflow(admin, contact, message, conv.id, settings.fonnte_api_key, settings.active_workflow_id, settings.fonnte_device);
     }
 
     return json({ ok: true });
