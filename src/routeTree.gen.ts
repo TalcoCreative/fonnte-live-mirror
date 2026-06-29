@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
+import { Route as AppPerformanceRouteImport } from './routes/_app.performance'
 import { Route as AppMyLeadsRouteImport } from './routes/_app.my-leads'
 import { Route as AppMyInboxRouteImport } from './routes/_app.my-inbox'
 import { Route as AppLeadsRouteImport } from './routes/_app.leads'
@@ -39,6 +40,11 @@ const IndexRoute = IndexRouteImport.update({
 const AppSettingsRoute = AppSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPerformanceRoute = AppPerformanceRouteImport.update({
+  id: '/performance',
+  path: '/performance',
   getParentRoute: () => AppRoute,
 } as any)
 const AppMyLeadsRoute = AppMyLeadsRouteImport.update({
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/leads': typeof AppLeadsRoute
   '/my-inbox': typeof AppMyInboxRoute
   '/my-leads': typeof AppMyLeadsRoute
+  '/performance': typeof AppPerformanceRoute
   '/settings': typeof AppSettingsRoute
 }
 export interface FileRoutesByTo {
@@ -106,6 +113,7 @@ export interface FileRoutesByTo {
   '/leads': typeof AppLeadsRoute
   '/my-inbox': typeof AppMyInboxRoute
   '/my-leads': typeof AppMyLeadsRoute
+  '/performance': typeof AppPerformanceRoute
   '/settings': typeof AppSettingsRoute
 }
 export interface FileRoutesById {
@@ -121,6 +129,7 @@ export interface FileRoutesById {
   '/_app/leads': typeof AppLeadsRoute
   '/_app/my-inbox': typeof AppMyInboxRoute
   '/_app/my-leads': typeof AppMyLeadsRoute
+  '/_app/performance': typeof AppPerformanceRoute
   '/_app/settings': typeof AppSettingsRoute
 }
 export interface FileRouteTypes {
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/my-inbox'
     | '/my-leads'
+    | '/performance'
     | '/settings'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/my-inbox'
     | '/my-leads'
+    | '/performance'
     | '/settings'
   id:
     | '__root__'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/_app/leads'
     | '/_app/my-inbox'
     | '/_app/my-leads'
+    | '/_app/performance'
     | '/_app/settings'
   fileRoutesById: FileRoutesById
 }
@@ -200,6 +212,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/performance': {
+      id: '/_app/performance'
+      path: '/performance'
+      fullPath: '/performance'
+      preLoaderRoute: typeof AppPerformanceRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/my-leads': {
@@ -270,6 +289,7 @@ interface AppRouteChildren {
   AppLeadsRoute: typeof AppLeadsRoute
   AppMyInboxRoute: typeof AppMyInboxRoute
   AppMyLeadsRoute: typeof AppMyLeadsRoute
+  AppPerformanceRoute: typeof AppPerformanceRoute
   AppSettingsRoute: typeof AppSettingsRoute
 }
 
@@ -282,6 +302,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppLeadsRoute: AppLeadsRoute,
   AppMyInboxRoute: AppMyInboxRoute,
   AppMyLeadsRoute: AppMyLeadsRoute,
+  AppPerformanceRoute: AppPerformanceRoute,
   AppSettingsRoute: AppSettingsRoute,
 }
 
