@@ -609,15 +609,39 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                     );
                   }
                   const out = m.direction === "OUTBOUND";
+                  const isMirror = out && !m.sent_by_id; // sent from WA device, not from inbox
+                  const senderLabel = out
+                    ? (isMirror ? "WhatsApp (HP)" : agentName(m.sent_by_id))
+                    : (active.contact?.full_name || "Pelanggan");
                   return (
                     <div key={m.id} className={cn("flex flex-col gap-0.5", out ? "items-end" : "items-start")}>
-                      <span className="text-[10px] text-muted-foreground px-1">
-                        {out ? agentName(m.sent_by_id) : (active.contact?.full_name || "Pelanggan")}
+                      <span className={cn("text-[10px] px-1 flex items-center gap-1",
+                        isMirror ? "text-emerald-600 dark:text-emerald-400 italic" : "text-muted-foreground")}>
+                        {isMirror && <Smartphone className="size-2.5" />}
+                        {senderLabel}
                       </span>
                       <div className={cn("max-w-[75%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words shadow-sm",
                         out ? "bg-chat-out text-chat-out-foreground rounded-br-sm"
                             : "bg-chat-in text-chat-in-foreground border rounded-bl-sm")}>
-                        {m.content}
+                        {m.media_url && m.type === "IMAGE" && (
+                          <a href={m.media_url} target="_blank" rel="noreferrer" className="block mb-1">
+                            <img src={m.media_url} alt="attachment" className="max-h-64 rounded-lg object-cover" />
+                          </a>
+                        )}
+                        {m.media_url && m.type === "AUDIO" && (
+                          <audio src={m.media_url} controls className="max-w-full mb-1" />
+                        )}
+                        {m.media_url && m.type === "DOCUMENT" && (
+                          <a href={m.media_url} target="_blank" rel="noreferrer"
+                            className="flex items-center gap-2 mb-1 px-2 py-1.5 rounded-lg bg-background/40 border border-white/20 hover:bg-background/60 text-xs">
+                            <FileText className="size-4 shrink-0" />
+                            <span className="truncate">{m.content || "Dokumen"}</span>
+                          </a>
+                        )}
+                        {(!m.media_url || m.type === "TEXT") && m.content}
+                        {m.media_url && m.type !== "TEXT" && m.content && m.content !== "(attachment)" && (
+                          <div className="mt-1">{m.content}</div>
+                        )}
                         <div className="text-[10px] opacity-60 mt-1 text-right">
                           {new Date(m.sent_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
                         </div>
