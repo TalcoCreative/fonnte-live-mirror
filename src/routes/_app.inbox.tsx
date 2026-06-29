@@ -140,12 +140,52 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  const [sortBy, setSortBy] = useState<"recent" | "oldest" | "unread" | "name_asc" | "name_desc">("recent");
+  const [filterUnread, setFilterUnread] = useState(false);
+  const [filterUnassigned, setFilterUnassigned] = useState(false);
+
+  // FR Agent: lock to "Leads Masuk" + "First Response" stages only
+  const allowedStageIds = useMemo(() => {
+    if (!isFirstResponse) return null;
+    return new Set(
+      stages.filter((s) => /leads masuk|first response/i.test(s.name)).map((s) => s.id),
+    );
+  }, [stages, isFirstResponse]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return conversations.filter((c) => !q ||
+    let list = conversations.filter((c) => !q ||
       c.contact?.full_name?.toLowerCase().includes(q) ||
       c.contact?.whatsapp_number?.includes(q));
-  }, [conversations, search]);
+    if (allowedStageIds) {
+      list = list.filter((c) => c.contact?.stage_id && allowedStageIds.has(c.contact.stage_id));
+    }
+    if (filterUnread) list = list.filter((c) => (c.unread_count || 0) > 0);
+    if (filterUnassigned) list = list.filter((c) => !c.assigned_agent_id);
+    const ts = (c: Conversation) => c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
+    const nm = (c: Conversation) => (c.contact?.full_name || c.contact?.whatsapp_number || "").toLowerCase();
+    list = [...list].sort((a, b) => {
+      switch (sortBy) {
+        case "oldest": return ts(a) - ts(b);
+        case "unread": return (b.unread_count || 0) - (a.unread_count || 0) || ts(b) - ts(a);
+        case "name_asc": return nm(a).localeCompare(nm(b));
+        case "name_desc": return nm(b).localeCompare(nm(a));
+        default: return ts(b) - ts(a);
+      }
+    });
+    return list;
+  }, [conversations, search, allowedStageIds, filterUnread, filterUnassigned, sortBy]);
+
+  // SLA badge color based on minutes since last inbound when unread
+  function slaTone(c: Conversation): "ok" | "warn" | "danger" | null {
+    if (!c.unread_count) return null;
+    const ts = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
+    if (!ts) return null;
+    const mins = (Date.now() - ts) / 60000;
+    if (mins < 5) return "ok";
+    if (mins < 10) return "warn";
+    return "danger";
+  }
 
   const active = conversations.find((c) => c.id === activeId);
   const activeProductName = active?.contact?.interested_product_id
