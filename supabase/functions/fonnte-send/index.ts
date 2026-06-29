@@ -88,6 +88,9 @@ Deno.serve(async (req) => {
       ? content
       : (fileBlob ? (media_filename || " ") : "");
     fd.append("message", wireMessage);
+    if (deviceNum) fd.append("device", String(deviceNum).replace(/\D/g, ""));
+    fd.append("countryCode", "62");
+
     if (fileBlob) {
       fd.append("file", fileBlob, media_filename || "attachment");
     }
