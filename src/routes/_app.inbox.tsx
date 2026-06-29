@@ -55,6 +55,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [stages, setStages] = useState<Stage[]>([]);
   const [agents, setAgents] = useState<Profile[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [deviceLabel, setDeviceLabel] = useState<string>("");
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [search, setSearch] = useState("");
   const [sending, setSending] = useState(false);
@@ -76,11 +77,12 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   }
 
   async function loadMeta() {
-    const [p, s, pr, qr] = await Promise.all([
+    const [p, s, pr, qr, ss] = await Promise.all([
       supabase.from("profiles").select("id, full_name, email"),
       supabase.from("stages").select("id, name, color").order("order_index"),
       supabase.from("products").select("id, name").eq("is_active", true).order("sort_order"),
       supabase.from("templates").select("id, name, content, sort_order").eq("is_quick_reply", true).order("sort_order"),
+      supabase.from("system_settings").select("key,value").in("key", ["fonnte_device", "device_label"]),
     ]);
     const pmap: Record<string, Profile> = {};
     (p.data || []).forEach((x: any) => { pmap[x.id] = x; });
@@ -89,6 +91,9 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     setStages((s.data as any) || []);
     setProducts((pr.data as any) || []);
     setQuickReplies((qr.data as any) || []);
+    const sMap = (ss.data || []).reduce((acc: any, x: any) => { acc[x.key] = x.value; return acc; }, {});
+    const label = sMap.device_label || sMap.fonnte_device;
+    setDeviceLabel(label ? `WA Device · ${label}` : "WA Device");
   }
 
   useEffect(() => { loadConversations(); loadMeta(); }, [mineOnly, user?.id]);
@@ -611,7 +616,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                   const out = m.direction === "OUTBOUND";
                   const isMirror = out && !m.sent_by_id; // sent from WA device, not from inbox
                   const senderLabel = out
-                    ? (isMirror ? "WhatsApp (HP)" : agentName(m.sent_by_id))
+                    ? (isMirror ? (deviceLabel || "WA Device") : agentName(m.sent_by_id))
                     : (active.contact?.full_name || "Pelanggan");
                   return (
                     <div key={m.id} className={cn("flex flex-col gap-0.5", out ? "items-end" : "items-start")}>

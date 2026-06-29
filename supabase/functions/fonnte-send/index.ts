@@ -78,7 +78,11 @@ Deno.serve(async (req) => {
 
     const fd = new FormData();
     fd.append("target", toNumber);
-    if (content) fd.append("message", content);
+    // Fonnte requires a non-empty message; use filename as caption fallback when attaching
+    const wireMessage = content && content.trim().length > 0
+      ? content
+      : (mediaUrl ? (media_filename || "") : "");
+    fd.append("message", wireMessage);
     if (mediaUrl) {
       fd.append("url", mediaUrl);
       if (media_filename) fd.append("filename", media_filename);
