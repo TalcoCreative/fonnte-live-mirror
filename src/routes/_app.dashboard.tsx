@@ -2,7 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, MessageSquare, Clock, TrendingUp, Inbox as InboxIcon, Wallet, UserCheck, History } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Users, MessageSquare, Clock, TrendingUp, Inbox as InboxIcon, Wallet, UserCheck, History,
+  Zap, Timer, MessageCircle, AlertTriangle, Trophy, ArrowRightLeft, CheckCircle2,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -19,13 +23,57 @@ export const Route = createFileRoute("/_app/dashboard")({
   component: Dashboard,
 });
 
+type Profile = { id: string; full_name: string | null; email: string | null; position: string | null };
+
+// Hour buckets for response-time distribution
+const HOUR_BUCKETS = [
+  { label: "0j (<1j)", min: 0, max: 3600 },
+  { label: "1-2j", min: 3600, max: 7200 },
+  { label: "2-4j", min: 7200, max: 14400 },
+  { label: "4-8j", min: 14400, max: 28800 },
+  { label: "8-24j", min: 28800, max: 86400 },
+  { label: ">24j", min: 86400, max: Infinity },
+];
+const BUCKET_COLORS = ["#10b981", "#14b8a6", "#3b82f6", "#8b5cf6", "#f59e0b", "#ef4444"];
+
+function bucketIdx(sec: number) {
+  for (let i = 0; i < HOUR_BUCKETS.length; i++) if (sec < HOUR_BUCKETS[i].max) return i;
+  return HOUR_BUCKETS.length - 1;
+}
+function fmtSec(s: number) {
+  if (!s) return "—";
+  if (s < 60) return `${s}d`;
+  if (s < 3600) return `${Math.round(s / 60)}m`;
+  return `${(s / 3600).toFixed(1)}j`;
+}
+
 function Dashboard() {
   const { user } = useAuth();
   const [range, setRange] = useState("7d");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [data, setData] = useState<any>(null);
-  const [selectedAgent, setSelectedAgent] = useState<any>(null);
+  const [division, setDivision] = useState<string>("all");
+  const [agentId, setAgentId] = useState<string>("all");
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+
+  useEffect(() => {
+    supabase.from("profiles").select("id, full_name, email, position").then(({ data }) => setProfiles((data as any) || []));
+  }, []);
+
+  const divisions = useMemo(() => {
+    const s = new Set<string>();
+    profiles.forEach((p) => { if (p.position) s.add(p.position); });
+    return Array.from(s).sort();
+  }, [profiles]);
+
+  const visibleProfiles = useMemo(() => {
+    return profiles.filter((p) => division === "all" || (p.position || "") === division);
+  }, [profiles, division]);
+
+  // reset agent if no longer in division
+  useEffect(() => {
+    if (agentId !== "all" && !visibleProfiles.find((p) => p.id === agentId)) setAgentId("all");
+  }, [visibleProfiles, agentId]);
 
   const { startISO, endISO } = useMemo(() => {
     const end = new Date(); end.setHours(23, 59, 59, 999);
@@ -41,27 +89,145 @@ function Dashboard() {
     return { startISO: start.toISOString(), endISO: end.toISOString() };
   }, [range, from, to]);
 
+  // filter helper: which user IDs are in scope
+  const scopeIds = useMemo(() => {
+    if (agentId !== "all") return new Set([agentId]);
+    if (division !== "all") return new Set(visibleProfiles.map((p) => p.id));
+    return null; // null = all
+  }, [agentId, division, visibleProfiles]);
+
+  return (
+    <div className="p-3 md:p-6 space-y-5 max-w-7xl mx-auto">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Performa tim, first response, & pipeline.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 items-end">
+          <div>
+            <Label className="text-xs">Rentang</Label>
+            <Select value={range} onValueChange={setRange}>
+              <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Hari ini</SelectItem>
+                <SelectItem value="7d">7 hari</SelectItem>
+                <SelectItem value="30d">30 hari</SelectItem>
+                <SelectItem value="month">Bulan ini</SelectItem>
+                <SelectItem value="year">Tahun ini</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {range === "custom" && (
+            <>
+              <div><Label className="text-xs">Dari</Label><Input type="date" className="h-9" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+              <div><Label className="text-xs">Sampai</Label><Input type="date" className="h-9" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+            </>
+          )}
+          <div>
+            <Label className="text-xs">Divisi</Label>
+            <Select value={division} onValueChange={setDivision}>
+              <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua divisi</SelectItem>
+                {divisions.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Agent</Label>
+            <Select value={agentId} onValueChange={setAgentId}>
+              <SelectTrigger className="w-44 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua agent</SelectItem>
+                {visibleProfiles.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.full_name || p.email}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </header>
+
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="grid grid-cols-3 w-full md:w-auto">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="first-response">First Response</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-5">
+          <OverviewTab user={user} startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} />
+        </TabsContent>
+        <TabsContent value="first-response" className="space-y-5">
+          <FirstResponseTab startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} />
+        </TabsContent>
+        <TabsContent value="performance" className="space-y-5">
+          <PerformanceTab startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+/* ============================== OVERVIEW ============================== */
+
+function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
+  user: any; startISO: string; endISO: string; profiles: Profile[]; scopeIds: Set<string> | null;
+}) {
+  const [data, setData] = useState<any>(null);
+  const [selectedAgent, setSelectedAgent] = useState<any>(null);
+
   useEffect(() => {
     (async () => {
-      const [contacts, openConv, msgsList, profiles, respMsgs, stageLogs, allConvs, assignLogs] = await Promise.all([
+      const [contacts, openConv, msgsList, respMsgs, stageLogs, allConvs, assignLogs] = await Promise.all([
         supabase.from("contacts").select("id, full_name, whatsapp_number, estimated_revenue, stage_id, created_at, stages(name, color)"),
         supabase.from("conversations").select("id, contact_id, assigned_agent_id, last_message_at, last_message_preview", { count: "exact" }).eq("status", "OPEN"),
-        supabase.from("messages").select("sent_at, direction")
-          .gte("sent_at", startISO).lte("sent_at", endISO),
-        supabase.from("profiles").select("id, full_name, email"),
-        supabase.from("messages").select("sent_by_id, response_seconds")
-          .gte("sent_at", startISO).lte("sent_at", endISO)
-          .eq("direction", "OUTBOUND").not("response_seconds", "is", null),
-        supabase.from("activity_logs").select("entity_id, metadata, created_at")
-          .eq("action", "change_stage")
-          .gte("created_at", startISO).lte("created_at", endISO)
-          .order("created_at", { ascending: true }),
+        supabase.from("messages").select("sent_at, direction, sent_by_id").gte("sent_at", startISO).lte("sent_at", endISO),
+        supabase.from("messages").select("sent_by_id, response_seconds, sent_at")
+          .gte("sent_at", startISO).lte("sent_at", endISO).eq("direction", "OUTBOUND").not("response_seconds", "is", null),
+        supabase.from("activity_logs").select("entity_id, metadata, created_at, user_id")
+          .eq("action", "change_stage").gte("created_at", startISO).lte("created_at", endISO).order("created_at", { ascending: true }),
         supabase.from("conversations").select("id, contact_id, created_at"),
         supabase.from("activity_logs").select("entity_id, metadata, created_at, user_id")
-          .eq("action", "assign_agent")
-          .gte("created_at", startISO).lte("created_at", endISO),
+          .eq("action", "assign_agent").gte("created_at", startISO).lte("created_at", endISO),
       ]);
 
+      // SCOPED responses
+      const allRespRaw = (respMsgs.data || []) as any[];
+      const allResp = scopeIds ? allRespRaw.filter((m) => m.sent_by_id && scopeIds.has(m.sent_by_id)) : allRespRaw;
+      const teamAvg = allResp.length ? Math.round(allResp.reduce((s, m) => s + (m.response_seconds || 0), 0) / allResp.length) : 0;
+
+      // Hour distribution
+      const buckets = HOUR_BUCKETS.map((b) => ({ label: b.label, count: 0 }));
+      allResp.forEach((m) => { buckets[bucketIdx(m.response_seconds || 0)].count++; });
+
+      // per-agent (with scope filter)
+      const perAgent: Record<string, { count: number; total: number; buckets: number[] }> = {};
+      allResp.forEach((m) => {
+        if (!m.sent_by_id) return;
+        perAgent[m.sent_by_id] = perAgent[m.sent_by_id] || { count: 0, total: 0, buckets: HOUR_BUCKETS.map(() => 0) };
+        perAgent[m.sent_by_id].count++;
+        perAgent[m.sent_by_id].total += m.response_seconds || 0;
+        perAgent[m.sent_by_id].buckets[bucketIdx(m.response_seconds || 0)]++;
+      });
+      const profMap: Record<string, Profile> = {};
+      profiles.forEach((p) => { profMap[p.id] = p; });
+
+      const agentStats = Object.entries(perAgent).map(([id, v]) => {
+        const p = profMap[id];
+        const rec: any = {
+          id, name: p?.full_name || p?.email?.split("@")[0] || "Agent",
+          division: p?.position || "—",
+          avg: Math.round(v.total / v.count),
+          avgHours: +(v.total / v.count / 3600).toFixed(2),
+          count: v.count,
+        };
+        HOUR_BUCKETS.forEach((b, i) => { rec[b.label] = v.buckets[i]; });
+        return rec;
+      }).sort((a, b) => a.avg - b.avg);
+
+      // Stage distribution & revenue (global — overview)
       const byStage: Record<string, { name: string; color: string; count: number }> = {};
       let totalRevenue = 0;
       (contacts.data || []).forEach((r: any) => {
@@ -74,29 +240,12 @@ function Dashboard() {
       const stageDist = Object.values(byStage).sort((a, b) => b.count - a.count);
       const topStage = stageDist[0];
 
-      const allResp = (respMsgs.data || []) as any[];
-      const teamAvg = allResp.length ? Math.round(allResp.reduce((s, m) => s + (m.response_seconds || 0), 0) / allResp.length) : 0;
+      const msgsScoped = scopeIds
+        ? (msgsList.data || []).filter((m: any) => m.direction === "INBOUND" || (m.sent_by_id && scopeIds.has(m.sent_by_id)))
+        : (msgsList.data || []);
 
-      const perAgent: Record<string, { count: number; total: number }> = {};
-      allResp.forEach((m: any) => {
-        if (!m.sent_by_id) return;
-        perAgent[m.sent_by_id] = perAgent[m.sent_by_id] || { count: 0, total: 0 };
-        perAgent[m.sent_by_id].count++;
-        perAgent[m.sent_by_id].total += m.response_seconds || 0;
-      });
-      const profMap: Record<string, any> = {};
-      (profiles.data || []).forEach((p: any) => { profMap[p.id] = p; });
-      const agentStats = Object.entries(perAgent).map(([id, v]) => ({
-        id,
-        name: profMap[id]?.full_name || profMap[id]?.email?.split("@")[0] || "Agent",
-        avg: Math.round(v.total / v.count),
-        avgMin: +(v.total / v.count / 60).toFixed(1),
-        count: v.count,
-      })).sort((a, b) => a.avg - b.avg);
-
-      // Daily message volume
       const dayMap: Record<string, { date: string; in: number; out: number }> = {};
-      (msgsList.data || []).forEach((m: any) => {
+      msgsScoped.forEach((m: any) => {
         const d = new Date(m.sent_at).toISOString().slice(0, 10);
         dayMap[d] = dayMap[d] || { date: d, in: 0, out: 0 };
         if (m.direction === "INBOUND") dayMap[d].in++; else dayMap[d].out++;
@@ -104,8 +253,7 @@ function Dashboard() {
       const dailySeries = Object.values(dayMap).sort((a, b) => a.date.localeCompare(b.date))
         .map((d) => ({ ...d, label: d.date.slice(5) }));
 
-      // Avg stage transition time (from log[i-1] to log[i] per contact)
-      // group change_stage logs by contact_id (from metadata) - fallback via conversation->contact
+      // Stage transitions (global)
       const convToContact: Record<string, string> = {};
       (allConvs.data || []).forEach((c: any) => { convToContact[c.id] = c.contact_id; });
       const contactCreated: Record<string, string> = {};
@@ -116,10 +264,10 @@ function Dashboard() {
         const m = l.metadata || {};
         const cid = m.contact_id || convToContact[l.entity_id];
         if (!cid) return;
+        if (scopeIds && l.user_id && !scopeIds.has(l.user_id)) return;
         perContactLogs[cid] = perContactLogs[cid] || [];
         perContactLogs[cid].push(l);
       });
-
       const edgeAgg: Record<string, { from: string; to: string; total: number; count: number }> = {};
       Object.entries(perContactLogs).forEach(([cid, lgs]) => {
         lgs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
@@ -153,7 +301,7 @@ function Dashboard() {
       const myLeadIds = new Set((myConvs || []).map((c: any) => c.contact_id));
       const myLeadCount = (contacts.data || []).filter((c: any) => myLeadIds.has(c.id)).length;
 
-      // --- Per-agent: historical (assign_agent logs) vs current (open conversations) ---
+      // Leads per agent (historical vs current) — scoped
       const contactMap: Record<string, any> = {};
       (contacts.data || []).forEach((c: any) => { contactMap[c.id] = c; });
 
@@ -162,6 +310,7 @@ function Dashboard() {
         const m = l.metadata || {};
         const toId = m.to_agent;
         if (!toId) return;
+        if (scopeIds && !scopeIds.has(toId)) return;
         histAgg[toId] = histAgg[toId] || { id: toId, assignCount: 0, contactIds: new Set() };
         histAgg[toId].assignCount++;
         const cid = convToContact[l.entity_id];
@@ -171,86 +320,46 @@ function Dashboard() {
       const currentAgg: Record<string, { id: string; convs: any[] }> = {};
       (openConv.data || []).forEach((c: any) => {
         if (!c.assigned_agent_id) return;
+        if (scopeIds && !scopeIds.has(c.assigned_agent_id)) return;
         const id = c.assigned_agent_id;
         currentAgg[id] = currentAgg[id] || { id, convs: [] };
         const contact = contactMap[c.contact_id] || {};
         currentAgg[id].convs.push({
-          conversation_id: c.id,
-          contact_id: c.contact_id,
-          full_name: contact.full_name,
-          whatsapp_number: contact.whatsapp_number,
-          stage: contact.stages?.name,
-          stage_color: contact.stages?.color,
-          last_message_at: c.last_message_at,
+          conversation_id: c.id, contact_id: c.contact_id, full_name: contact.full_name,
+          whatsapp_number: contact.whatsapp_number, stage: contact.stages?.name,
+          stage_color: contact.stages?.color, last_message_at: c.last_message_at,
           last_message_preview: c.last_message_preview,
         });
       });
 
-      const agentLeadStats = Object.values(profMap).map((p: any) => {
-        const h = histAgg[p.id];
-        const c = currentAgg[p.id];
+      const agentLeadStats = profiles.map((p) => {
+        if (scopeIds && !scopeIds.has(p.id)) return null;
+        const h = histAgg[p.id]; const c = currentAgg[p.id];
         return {
-          id: p.id,
-          name: p.full_name || p.email?.split("@")[0] || "Agent",
-          email: p.email,
+          id: p.id, name: p.full_name || p.email?.split("@")[0] || "Agent",
+          email: p.email, division: p.position || "—",
           historicalUnique: h ? h.contactIds.size : 0,
           historicalTotal: h ? h.assignCount : 0,
           currentCount: c ? c.convs.length : 0,
           currentList: c ? c.convs : [],
           historicalContactIds: h ? Array.from(h.contactIds) : [],
         };
-      }).filter((a: any) => a.historicalTotal > 0 || a.currentCount > 0)
-        .sort((a: any, b: any) => b.currentCount - a.currentCount || b.historicalUnique - a.historicalUnique);
+      }).filter((a): a is any => !!a && (a.historicalTotal > 0 || a.currentCount > 0))
+        .sort((a, b) => b.currentCount - a.currentCount || b.historicalUnique - a.historicalUnique);
 
       setData({
         totalContacts: (contacts.data || []).length,
         openConv: openConv.count || 0,
-        messagesRange: (msgsList.data || []).length,
+        messagesRange: msgsScoped.length,
         teamAvg, agentStats, stageDist, topStage, totalRevenue,
         myInbox, myLeads: myLeadCount, dailySeries, transitions,
-        agentLeadStats, contactMap,
+        agentLeadStats, contactMap, buckets,
       });
     })();
-  }, [startISO, endISO, user?.id]);
-
-  function fmtSec(s: number) {
-    if (!s) return "—";
-    if (s < 60) return `${s}d`;
-    if (s < 3600) return `${Math.round(s / 60)}m`;
-    return `${(s / 3600).toFixed(1)}j`;
-  }
+  }, [startISO, endISO, user?.id, profiles, scopeIds]);
 
   return (
-    <div className="p-3 md:p-6 space-y-5 max-w-7xl mx-auto">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Performa tim & lead pipeline.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 items-end">
-          <div>
-            <Label className="text-xs">Rentang</Label>
-            <Select value={range} onValueChange={setRange}>
-              <SelectTrigger className="w-40 h-9"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="today">Hari ini</SelectItem>
-                <SelectItem value="7d">7 hari terakhir</SelectItem>
-                <SelectItem value="30d">30 hari terakhir</SelectItem>
-                <SelectItem value="month">Bulan ini</SelectItem>
-                <SelectItem value="year">Tahun ini</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {range === "custom" && (
-            <>
-              <div><Label className="text-xs">Dari</Label><Input type="date" className="h-9" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-              <div><Label className="text-xs">Sampai</Label><Input type="date" className="h-9" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-            </>
-          )}
-        </div>
-      </header>
-
+    <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard icon={InboxIcon} label="My Inbox" value={data?.myInbox ?? "—"} />
         <StatCard icon={Users} label="My Leads" value={data?.myLeads ?? "—"} />
@@ -262,7 +371,6 @@ function Dashboard() {
         <StatCard icon={Wallet} label="Est. Revenue" value={`Rp ${(data?.totalRevenue || 0).toLocaleString("id-ID")}`} />
       </div>
 
-      {/* Charts row 1 */}
       <div className="grid lg:grid-cols-3 gap-4">
         <Card className="glow-soft lg:col-span-2">
           <CardHeader><CardTitle className="text-base">Volume Pesan Harian</CardTitle></CardHeader>
@@ -282,7 +390,7 @@ function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="label" fontSize={11} />
                 <YAxis fontSize={11} allowDecimals={false} />
-                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="in" name="Masuk" stroke="hsl(var(--primary))" fill="url(#gIn)" strokeWidth={2} />
                 <Area type="monotone" dataKey="out" name="Keluar" stroke="#10b981" fill="url(#gOut)" strokeWidth={2} />
@@ -301,7 +409,7 @@ function Dashboard() {
                     <Cell key={i} fill={s.color || "#888"} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                <Tooltip contentStyle={tooltipStyle} />
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-1 mt-2 max-h-32 overflow-auto">
@@ -317,17 +425,45 @@ function Dashboard() {
         </Card>
       </div>
 
-      {/* Charts row 2 */}
+      {/* Distribusi Waktu Respon — INFOGRAPHIC */}
+      <Card className="glow-soft">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Clock className="size-4" /> Distribusi Waktu Respon (per jam)</CardTitle>
+          <p className="text-xs text-muted-foreground">Berapa pesan keluar yang dijawab dalam berapa jam. Filter agent/divisi di atas akan menyesuaikan.</p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+            {(data?.buckets || HOUR_BUCKETS.map((b) => ({ label: b.label, count: 0 }))).map((b: any, i: number) => (
+              <div key={b.label} className="rounded-xl border p-3 text-center bg-card">
+                <div className="text-2xl font-bold" style={{ color: BUCKET_COLORS[i] }}>{b.count}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{b.label}</div>
+              </div>
+            ))}
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data?.buckets || []}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis dataKey="label" fontSize={11} />
+              <YAxis fontSize={11} allowDecimals={false} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                {(data?.buckets || []).map((_: any, i: number) => <Cell key={i} fill={BUCKET_COLORS[i]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
       <div className="grid lg:grid-cols-2 gap-4">
         <Card className="glow-soft">
           <CardHeader><CardTitle className="text-base">Avg Respon per Agent (menit)</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data?.agentStats || []} layout="vertical" margin={{ left: 10 }}>
+              <BarChart data={(data?.agentStats || []).map((a: any) => ({ name: a.name, avgMin: +(a.avg / 60).toFixed(1) }))} layout="vertical" margin={{ left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis type="number" fontSize={11} />
                 <YAxis type="category" dataKey="name" fontSize={11} width={90} />
-                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Bar dataKey="avgMin" name="Menit" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -343,7 +479,7 @@ function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="name" fontSize={10} angle={-20} textAnchor="end" height={60} interval={0} />
                 <YAxis fontSize={11} allowDecimals={false} />
-                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Bar dataKey="count" name="Jumlah" radius={[6, 6, 0, 0]}>
                   {(data?.stageDist || []).map((s: any, i: number) => (
                     <Cell key={i} fill={s.color || "hsl(var(--primary))"} />
@@ -355,26 +491,48 @@ function Dashboard() {
         </Card>
       </div>
 
-      {/* Stage transitions */}
+      {/* Per-agent hour-bucket stack — INFOGRAPHIC */}
+      <Card className="glow-soft">
+        <CardHeader>
+          <CardTitle className="text-base">Sebaran Waktu Respon per Agent (stacked)</CardTitle>
+          <p className="text-xs text-muted-foreground">Komposisi cepat vs lambat per agent — semakin banyak hijau, semakin responsif.</p>
+        </CardHeader>
+        <CardContent>
+          {!data?.agentStats?.length ? (
+            <p className="text-center text-sm text-muted-foreground py-8">Belum ada data.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(220, (data.agentStats.length) * 38)}>
+              <BarChart data={data.agentStats} layout="vertical" margin={{ left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis type="number" fontSize={11} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" fontSize={11} width={100} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {HOUR_BUCKETS.map((b, i) => (
+                  <Bar key={b.label} dataKey={b.label} stackId="a" fill={BUCKET_COLORS[i]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
       <Card className="glow-soft">
         <CardHeader>
           <CardTitle className="text-base">Avg Perpindahan Stage</CardTitle>
-          <p className="text-xs text-muted-foreground">Rata-rata waktu (jam) & jumlah perpindahan antar stage berdasarkan log aktivitas dalam rentang ini.</p>
+          <p className="text-xs text-muted-foreground">Rata-rata waktu (jam) & jumlah perpindahan antar stage.</p>
         </CardHeader>
         <CardContent>
           {(!data?.transitions || data.transitions.length === 0) ? (
             <p className="text-center text-sm text-muted-foreground py-8">Belum ada perpindahan stage pada rentang ini.</p>
           ) : (
             <div className="grid lg:grid-cols-2 gap-4">
-              <ResponsiveContainer width="100%" height={Math.max(220, (data?.transitions?.length || 0) * 32)}>
-                <BarChart data={data?.transitions || []} layout="vertical" margin={{ left: 10 }}>
+              <ResponsiveContainer width="100%" height={Math.max(220, data.transitions.length * 32)}>
+                <BarChart data={data.transitions} layout="vertical" margin={{ left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis type="number" fontSize={11} />
                   <YAxis type="category" dataKey="edge" fontSize={11} width={160} />
-                  <Tooltip
-                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
-                    formatter={(v: any, n: any) => n === "avgHours" ? [`${v} jam`, "Rata-rata"] : [v, "Jumlah"]}
-                  />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="avgHours" name="Avg (jam)" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
                   <Bar dataKey="count" name="Jumlah" fill="#10b981" radius={[0, 6, 6, 0]} />
@@ -405,25 +563,22 @@ function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Leads per Agent (Historical vs Current) */}
       <Card className="glow-soft">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2"><UserCheck className="size-4" /> Leads per Agent</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            <b>Historis</b>: total lead unik yang pernah di-assign ke agent (rentang dipilih). <b>Saat ini</b>: lead aktif yang sedang dipegang agent. Klik baris untuk detail.
-          </p>
+          <p className="text-xs text-muted-foreground"><b>Historis</b>: unik di-assign pada rentang. <b>Saat ini</b>: dipegang saat ini. Klik baris untuk detail.</p>
         </CardHeader>
         <CardContent>
           {(!data?.agentLeadStats || data.agentLeadStats.length === 0) ? (
             <p className="text-center text-sm text-muted-foreground py-8">Belum ada data assignment.</p>
           ) : (
             <div className="grid lg:grid-cols-2 gap-4">
-              <ResponsiveContainer width="100%" height={Math.max(220, (data?.agentLeadStats?.length || 0) * 38)}>
-                <BarChart data={data?.agentLeadStats || []} layout="vertical" margin={{ left: 10 }}>
+              <ResponsiveContainer width="100%" height={Math.max(220, data.agentLeadStats.length * 38)}>
+                <BarChart data={data.agentLeadStats} layout="vertical" margin={{ left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis type="number" fontSize={11} allowDecimals={false} />
                   <YAxis type="category" dataKey="name" fontSize={11} width={100} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="historicalUnique" name="Historis (unik)" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
                   <Bar dataKey="currentCount" name="Sedang dipegang" fill="#10b981" radius={[0, 6, 6, 0]} />
@@ -434,8 +589,8 @@ function Dashboard() {
                   <thead className="text-muted-foreground">
                     <tr className="border-b">
                       <th className="text-left py-2">Agent</th>
-                      <th className="text-right">Historis (unik)</th>
-                      <th className="text-right">Total Assign</th>
+                      <th className="text-left">Divisi</th>
+                      <th className="text-right">Historis</th>
                       <th className="text-right">Saat ini</th>
                     </tr>
                   </thead>
@@ -443,8 +598,8 @@ function Dashboard() {
                     {data.agentLeadStats.map((a: any) => (
                       <tr key={a.id} className="border-b hover:bg-accent/40 cursor-pointer" onClick={() => setSelectedAgent(a)}>
                         <td className="py-2 pr-2 font-medium">{a.name}</td>
+                        <td className="text-xs text-muted-foreground">{a.division}</td>
                         <td className="text-right tabular-nums">{a.historicalUnique}</td>
-                        <td className="text-right tabular-nums text-muted-foreground">{a.historicalTotal}</td>
                         <td className="text-right tabular-nums"><Badge variant="secondary">{a.currentCount}</Badge></td>
                       </tr>
                     ))}
@@ -457,7 +612,456 @@ function Dashboard() {
       </Card>
 
       <AgentDetailDialog agent={selectedAgent} contactMap={data?.contactMap || {}} onClose={() => setSelectedAgent(null)} />
-    </div>
+    </>
+  );
+}
+
+/* ============================== FIRST RESPONSE ============================== */
+
+function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
+  startISO: string; endISO: string; profiles: Profile[]; scopeIds: Set<string> | null;
+}) {
+  const [data, setData] = useState<any>(null);
+  const [slaGreen, setSlaGreen] = useState(5);
+  const [slaYellow, setSlaYellow] = useState(10);
+
+  useEffect(() => {
+    (async () => {
+      const { data: settings } = await supabase.from("system_settings").select("key,value").in("key", ["sla_green_minutes", "sla_yellow_minutes"]);
+      (settings || []).forEach((s: any) => {
+        if (s.key === "sla_green_minutes") setSlaGreen(Number(s.value) || 5);
+        if (s.key === "sla_yellow_minutes") setSlaYellow(Number(s.value) || 10);
+      });
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const { data: events } = await supabase
+        .from("audit_events")
+        .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value")
+        .gte("occurred_at", startISO).lte("occurred_at", endISO)
+        .order("occurred_at", { ascending: true })
+        .limit(10000);
+
+      const nameById: Record<string, string> = {};
+      profiles.forEach((p) => { nameById[p.id] = p.full_name || p.email || "Agent"; });
+
+      const evs = (events || []) as any[];
+      const newLeads = evs.filter((e) => e.event_type === "contact_created").length;
+
+      const inboundFirst: Record<string, number> = {};
+      const responses: { contact_id: string; actor_id: string | null; seconds: number; at: string }[] = [];
+      for (const e of evs) {
+        if (e.event_type === "chat_in" && !inboundFirst[e.contact_id]) {
+          inboundFirst[e.contact_id] = new Date(e.occurred_at).getTime();
+        } else if (e.event_type === "chat_out" && inboundFirst[e.contact_id] && e.actor_id) {
+          if (scopeIds && !scopeIds.has(e.actor_id)) { delete inboundFirst[e.contact_id]; continue; }
+          const seconds = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - inboundFirst[e.contact_id]) / 1000));
+          responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
+          delete inboundFirst[e.contact_id];
+        }
+      }
+
+      const totalResp = responses.length;
+      const avgSec = totalResp ? Math.round(responses.reduce((s, r) => s + r.seconds, 0) / totalResp) : 0;
+      const unresponded = Object.keys(inboundFirst).length;
+
+      const greenS = slaGreen * 60;
+      const yellowS = slaYellow * 60;
+      const slaCount = { green: 0, yellow: 0, red: 0 };
+      responses.forEach((r) => {
+        if (r.seconds <= greenS) slaCount.green++;
+        else if (r.seconds <= yellowS) slaCount.yellow++;
+        else slaCount.red++;
+      });
+
+      // Hour-buckets infographic
+      const hourBuckets = HOUR_BUCKETS.map((b) => ({ label: b.label, count: 0 }));
+      responses.forEach((r) => { hourBuckets[bucketIdx(r.seconds)].count++; });
+
+      const perAgent: Record<string, { name: string; count: number; total: number; green: number }> = {};
+      responses.forEach((r) => {
+        const name = (r.actor_id && nameById[r.actor_id]) || "Tidak Diketahui";
+        perAgent[name] = perAgent[name] || { name, count: 0, total: 0, green: 0 };
+        perAgent[name].count++;
+        perAgent[name].total += r.seconds;
+        if (r.seconds <= greenS) perAgent[name].green++;
+      });
+      const leaderboard = Object.values(perAgent)
+        .map((a) => ({ name: a.name, avg: Math.round(a.total / a.count), count: a.count, slaPct: Math.round((a.green / a.count) * 100) }))
+        .sort((a, b) => a.avg - b.avg).slice(0, 10);
+
+      const hourly: Record<number, number> = {};
+      for (let h = 0; h < 24; h++) hourly[h] = 0;
+      evs.filter((e) => e.event_type === "chat_in").forEach((e) => {
+        const h = new Date(e.occurred_at).getHours();
+        hourly[h]++;
+      });
+      const hourlyData = Object.entries(hourly).map(([h, c]) => ({ hour: `${String(h).padStart(2, "0")}:00`, count: c }));
+
+      const days: Record<string, { date: string; leads: number; responded: number }> = {};
+      const dStart = new Date(startISO); const dEnd = new Date(endISO);
+      for (let d = new Date(dStart); d <= dEnd; d.setDate(d.getDate() + 1)) {
+        const key = d.toISOString().slice(0, 10);
+        days[key] = { date: key.slice(5), leads: 0, responded: 0 };
+      }
+      evs.forEach((e) => {
+        const key = e.occurred_at.slice(0, 10);
+        if (!days[key]) return;
+        if (e.event_type === "contact_created") days[key].leads++;
+      });
+      responses.forEach((r) => {
+        const key = r.at.slice(0, 10);
+        if (days[key]) days[key].responded++;
+      });
+      const trend = Object.values(days);
+
+      setData({
+        newLeads, totalResp, avgSec, unresponded, slaCount,
+        leaderboard, hourlyData, trend, hourBuckets,
+        slaPct: totalResp ? Math.round((slaCount.green / totalResp) * 100) : 0,
+      });
+    })();
+  }, [startISO, endISO, slaGreen, slaYellow, profiles, scopeIds]);
+
+  if (!data) return <div className="text-muted-foreground py-10 text-center">Memuat...</div>;
+  const fmtTime = (s: number) => s < 60 ? `${s}d` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}d` : `${Math.floor(s / 3600)}j ${Math.floor((s % 3600) / 60)}m`;
+  const slaPie = [
+    { name: `Hijau (<${slaGreen}m)`, value: data.slaCount.green, fill: "#10b981" },
+    { name: `Kuning (${slaGreen}-${slaYellow}m)`, value: data.slaCount.yellow, fill: "#f59e0b" },
+    { name: `Merah (>${slaYellow}m)`, value: data.slaCount.red, fill: "#ef4444" },
+  ];
+
+  return (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <KPI icon={MessageCircle} label="Leads Baru" value={data.newLeads} color="text-blue-500" />
+        <KPI icon={UserCheck} label="Sudah Dijawab" value={data.totalResp} color="text-emerald-500" />
+        <KPI icon={Timer} label="Avg Respon" value={fmtTime(data.avgSec)} color="text-primary" />
+        <KPI icon={Zap} label={`SLA <${slaGreen}m`} value={`${data.slaPct}%`} color="text-emerald-500" />
+        <KPI icon={AlertTriangle} label="Belum Dijawab" value={data.unresponded} color="text-rose-500" />
+      </div>
+
+      <Card className="glow-soft">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Clock className="size-4" /> Distribusi Waktu First Response (jam)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+            {data.hourBuckets.map((b: any, i: number) => (
+              <div key={b.label} className="rounded-xl border p-3 text-center bg-card">
+                <div className="text-2xl font-bold" style={{ color: BUCKET_COLORS[i] }}>{b.count}</div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">{b.label}</div>
+              </div>
+            ))}
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={data.hourBuckets}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis dataKey="label" fontSize={11} />
+              <YAxis fontSize={11} allowDecimals={false} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                {data.hourBuckets.map((_: any, i: number) => <Cell key={i} fill={BUCKET_COLORS[i]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Card className="glow-soft">
+          <CardHeader><CardTitle className="text-base">SLA Breakdown</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {slaPie.map((s) => (
+                <div key={s.name} className="rounded-xl border p-3 text-center">
+                  <div className="text-2xl font-bold" style={{ color: s.fill }}>{s.value}</div>
+                  <div className="text-[11px] text-muted-foreground">{s.name}</div>
+                </div>
+              ))}
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={slaPie}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {slaPie.map((s, i) => <Cell key={i} fill={s.fill} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="glow-soft">
+          <CardHeader><CardTitle className="text-base">Beban Per Jam (Inbound)</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={data.hourlyData}>
+                <defs>
+                  <linearGradient id="hourGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" fill="url(#hourGrad)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="glow-soft">
+        <CardHeader><CardTitle className="text-base">Tren Harian: Leads Baru vs Direspon</CardTitle></CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={data.trend}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Area type="monotone" dataKey="leads" name="Leads Baru" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.25} />
+              <Area type="monotone" dataKey="responded" name="Direspon" stroke="#10b981" fill="#10b981" fillOpacity={0.25} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      <Card className="glow-soft">
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Trophy className="size-4" /> Leaderboard First Response</CardTitle></CardHeader>
+        <CardContent>
+          {data.leaderboard.length === 0 ? (
+            <div className="text-sm text-muted-foreground text-center py-8">Belum ada data respon.</div>
+          ) : (
+            <div className="space-y-2">
+              {data.leaderboard.map((a: any, i: number) => (
+                <div key={a.name} className="flex items-center gap-3 rounded-xl border p-3">
+                  <div className="size-8 grid place-items-center rounded-lg bg-primary/10 text-primary font-semibold">{i + 1}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{a.name}</div>
+                    <div className="text-[11px] text-muted-foreground">{a.count} respon</div>
+                  </div>
+                  <Badge variant="outline" className="font-mono text-xs">{fmtTime(a.avg)}</Badge>
+                  <Badge className={a.slaPct >= 80 ? "bg-emerald-500/15 text-emerald-500" : a.slaPct >= 50 ? "bg-amber-500/15 text-amber-500" : "bg-rose-500/15 text-rose-500"}>
+                    {a.slaPct}% SLA
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+/* ============================== PERFORMANCE ============================== */
+
+function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
+  startISO: string; endISO: string; profiles: Profile[]; scopeIds: Set<string> | null;
+}) {
+  const [rows, setRows] = useState<any[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: events }, { data: stages }] = await Promise.all([
+        supabase.from("audit_events")
+          .select("event_type, actor_id, contact_id, new_value, occurred_at")
+          .gte("occurred_at", startISO).lte("occurred_at", endISO).limit(20000),
+        supabase.from("stages").select("id, name, order_index").order("order_index"),
+      ]);
+
+      const evs = (events || []) as any[];
+      const wonStageIds = new Set((stages || []).filter((s: any) => ["Closed Won", "Treatment"].includes(s.name)).map((s: any) => s.id));
+
+      const firstIn: Record<string, number> = {};
+      const responses: Record<string, { total: number; count: number; buckets: number[] }> = {};
+      evs.sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
+      for (const e of evs) {
+        if (e.event_type === "chat_in" && !firstIn[e.contact_id]) {
+          firstIn[e.contact_id] = new Date(e.occurred_at).getTime();
+        } else if (e.event_type === "chat_out" && firstIn[e.contact_id] && e.actor_id) {
+          const sec = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - firstIn[e.contact_id]) / 1000));
+          responses[e.actor_id] = responses[e.actor_id] || { total: 0, count: 0, buckets: HOUR_BUCKETS.map(() => 0) };
+          responses[e.actor_id].total += sec;
+          responses[e.actor_id].count++;
+          responses[e.actor_id].buckets[bucketIdx(sec)]++;
+          delete firstIn[e.contact_id];
+        }
+      }
+
+      const perAgent: Record<string, any> = {};
+      const ensure = (id: string) => {
+        if (!perAgent[id]) {
+          const p = profiles.find((x) => x.id === id);
+          perAgent[id] = {
+            id, name: p?.full_name || p?.email || "Tidak dikenal",
+            division: p?.position || "—",
+            outbound: 0, assigned: 0, stageChanges: 0, won: 0, avgResp: 0, respCount: 0,
+            buckets: HOUR_BUCKETS.map(() => 0),
+          };
+        }
+        return perAgent[id];
+      };
+
+      evs.forEach((e) => {
+        if (!e.actor_id) return;
+        if (scopeIds && !scopeIds.has(e.actor_id)) return;
+        const a = ensure(e.actor_id);
+        if (e.event_type === "chat_out") a.outbound++;
+        else if (["assigned", "reassigned", "conv_assigned", "conv_takeover"].includes(e.event_type)) a.assigned++;
+        else if (e.event_type === "stage_changed") {
+          a.stageChanges++;
+          const newId = e.new_value?.stage_id;
+          if (newId && wonStageIds.has(newId)) a.won++;
+        }
+      });
+
+      Object.entries(responses).forEach(([id, r]) => {
+        if (scopeIds && !scopeIds.has(id)) return;
+        const a = ensure(id);
+        a.avgResp = Math.round(r.total / r.count);
+        a.respCount = r.count;
+        a.buckets = r.buckets;
+        HOUR_BUCKETS.forEach((b, i) => { a[b.label] = r.buckets[i]; });
+      });
+
+      setRows(Object.values(perAgent).sort((a: any, b: any) => b.outbound - a.outbound));
+    })();
+  }, [startISO, endISO, profiles, scopeIds]);
+
+  const fmtTime = (s: number) => !s ? "-" : s < 60 ? `${s}d` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}j ${Math.floor((s % 3600) / 60)}m`;
+  const chartData = rows.slice(0, 10).map((r) => ({ name: r.name.split(" ")[0], Reply: r.outbound, Assign: r.assigned, Stage: r.stageChanges, Won: r.won }));
+
+  return (
+    <>
+      <Card className="glow-soft">
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Trophy className="size-4" /> Top 10 Agent — Aktivitas</CardTitle></CardHeader>
+        <CardContent>
+          {chartData.length === 0 ? (
+            <div className="text-sm text-muted-foreground text-center py-8">Belum ada data.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="Reply" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Assign" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Stage" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Won" fill="#10b981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="glow-soft">
+        <CardHeader>
+          <CardTitle className="text-base">Sebaran Waktu Respon per Agent (jam, stacked)</CardTitle>
+          <p className="text-xs text-muted-foreground">Komposisi cepat (hijau) → lambat (merah) per agent.</p>
+        </CardHeader>
+        <CardContent>
+          {rows.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground py-8">Belum ada data.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={Math.max(220, rows.length * 38)}>
+              <BarChart data={rows} layout="vertical" margin={{ left: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
+                <XAxis type="number" fontSize={11} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" fontSize={11} width={100} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {HOUR_BUCKETS.map((b, i) => (
+                  <Bar key={b.label} dataKey={b.label} stackId="a" fill={BUCKET_COLORS[i]} />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="glow-soft">
+        <CardHeader><CardTitle className="text-base">Detail per Agent</CardTitle></CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs text-muted-foreground border-b">
+              <tr>
+                <th className="text-left py-2 px-2">Agent</th>
+                <th className="text-left py-2 px-2">Divisi</th>
+                <th className="text-right py-2 px-2"><MessageSquare className="size-3 inline" /> Reply</th>
+                <th className="text-right py-2 px-2"><ArrowRightLeft className="size-3 inline" /> Assign</th>
+                <th className="text-right py-2 px-2">Stage Δ</th>
+                <th className="text-right py-2 px-2"><CheckCircle2 className="size-3 inline" /> Won</th>
+                <th className="text-right py-2 px-2"><Clock className="size-3 inline" /> Avg Respon</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">Belum ada aktivitas pada rentang ini.</td></tr>
+              )}
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b last:border-0 hover:bg-accent/40">
+                  <td className="py-2 px-2 font-medium">{r.name}</td>
+                  <td className="py-2 px-2 text-xs text-muted-foreground">{r.division}</td>
+                  <td className="py-2 px-2 text-right">{r.outbound}</td>
+                  <td className="py-2 px-2 text-right">{r.assigned}</td>
+                  <td className="py-2 px-2 text-right">{r.stageChanges}</td>
+                  <td className="py-2 px-2 text-right">
+                    {r.won > 0 ? <Badge className="bg-emerald-500/15 text-emerald-500">{r.won}</Badge> : <span className="text-muted-foreground">0</span>}
+                  </td>
+                  <td className="py-2 px-2 text-right font-mono text-xs">{fmtTime(r.avgResp)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+/* ============================== SHARED ============================== */
+
+const tooltipStyle = { background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 } as const;
+
+function StatCard({ icon: Icon, label, value }: { icon: any; label: string; value: any }) {
+  return (
+    <Card className="glow-soft">
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className="size-10 rounded-lg bg-primary/15 text-primary grid place-items-center glow-primary">
+          <Icon className="size-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-[11px] text-muted-foreground">{label}</div>
+          <div className="text-lg font-bold truncate">{value}</div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function KPI({ icon: Icon, label, value, color }: any) {
+  return (
+    <Card className="glow-soft">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs text-muted-foreground">{label}</span>
+          <Icon className={`size-4 ${color}`} />
+        </div>
+        <div className="text-xl md:text-2xl font-bold">{value}</div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -475,7 +1079,6 @@ function AgentDetailDialog({ agent, contactMap, onClose }: { agent: any; contact
               <div className="rounded-lg border p-3"><div className="text-[11px] text-muted-foreground">Total Assign</div><div className="text-xl font-bold">{agent.historicalTotal}</div></div>
               <div className="rounded-lg border p-3"><div className="text-[11px] text-muted-foreground">Sedang dipegang</div><div className="text-xl font-bold">{agent.currentCount}</div></div>
             </div>
-
             <div>
               <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><InboxIcon className="size-4" /> Lead aktif ({agent.currentList.length})</h4>
               {agent.currentList.length === 0 ? (
@@ -495,7 +1098,6 @@ function AgentDetailDialog({ agent, contactMap, onClose }: { agent: any; contact
                 </div>
               )}
             </div>
-
             <div>
               <h4 className="font-semibold text-sm mb-2 flex items-center gap-2"><History className="size-4" /> Pernah di-assign ({agent.historicalContactIds.length})</h4>
               {agent.historicalContactIds.length === 0 ? (
@@ -522,21 +1124,5 @@ function AgentDetailDialog({ agent, contactMap, onClose }: { agent: any; contact
         )}
       </DialogContent>
     </Dialog>
-  );
-}
-
-function StatCard({ icon: Icon, label, value }: { icon: any; label: string; value: any }) {
-  return (
-    <Card className="glow-soft">
-      <CardContent className="p-4 flex items-center gap-3">
-        <div className="size-10 rounded-lg bg-primary/15 text-primary grid place-items-center glow-primary">
-          <Icon className="size-5" />
-        </div>
-        <div className="min-w-0">
-          <div className="text-[11px] text-muted-foreground">{label}</div>
-          <div className="text-lg font-bold truncate">{value}</div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
