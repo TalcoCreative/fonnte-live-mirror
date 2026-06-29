@@ -409,20 +409,36 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
               const sla = slaTone(c);
               const slaCls = sla === "ok" ? "border-l-emerald-500" : sla === "warn" ? "border-l-amber-500" : sla === "danger" ? "border-l-rose-500" : "border-l-transparent";
               return (
-                <button key={c.id} onClick={() => setActiveId(c.id)}
-                  className={cn("w-full text-left px-4 py-3 border-b border-l-4 hover:bg-accent/60 flex flex-col gap-1 transition-colors",
+                <button key={c.id}
+                  onClick={() => { if (longPressFired.current) { longPressFired.current = false; return; } setActiveId(c.id); }}
+                  onPointerDown={() => startLongPress(c.id)}
+                  onPointerUp={cancelLongPress}
+                  onPointerLeave={cancelLongPress}
+                  onPointerCancel={cancelLongPress}
+                  onContextMenu={(e) => { e.preventDefault(); markUnread(c.id); }}
+                  className={cn("w-full text-left px-4 py-3 border-b border-l-4 hover:bg-accent/60 flex flex-col gap-1 transition-colors select-none touch-none",
                     slaCls,
                     activeId === c.id && "bg-accent")}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-sm truncate">
                       {c.contact?.full_name || "Tanpa nama"}
                     </span>
-                    {c.unread_count > 0 && (
-                      <span className="text-[10px] bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 shrink-0 glow-primary">
-                        {c.unread_count}
+                    <span className="flex items-center gap-1 shrink-0">
+                      <span
+                        role="button"
+                        title={c.unread_count > 0 ? "Tandai sudah dibaca" : "Tandai belum dibaca (atau tahan)"}
+                        onClick={(e) => { e.stopPropagation(); markUnread(c.id); }}
+                        className="opacity-60 hover:opacity-100 p-1 rounded hover:bg-background/60 cursor-pointer">
+                        <MailOpen className="size-3" />
                       </span>
-                    )}
+                      {c.unread_count > 0 && (
+                        <span className="text-[10px] bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 glow-primary">
+                          {c.unread_count}
+                        </span>
+                      )}
+                    </span>
                   </div>
+
                   <div className="text-[11px] text-muted-foreground">{c.contact?.whatsapp_number}</div>
                   <div className="text-xs text-muted-foreground truncate">{c.last_message_preview || "—"}</div>
                   <div className="flex items-center gap-1.5 flex-wrap">
