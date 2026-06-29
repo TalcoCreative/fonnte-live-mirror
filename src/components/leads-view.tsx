@@ -266,24 +266,41 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved 
   useEffect(() => {
     if (!contact) return;
     (async () => {
-      // Find conversation IDs for this contact, then load logs scoped to contact or its convs
       const { data: convs } = await supabase.from("conversations").select("id").eq("contact_id", contact.id);
-      const ids = [contact.id, ...((convs || []).map((c: any) => c.id))];
-      const [{ data: lg }, { data: profs }] = await Promise.all([
+      const convIds = (convs || []).map((c: any) => c.id);
+      const ids = [contact.id, ...convIds];
+      const [{ data: lg }, { data: ev }, { data: profs }, { data: stagesAll }, { data: prodAll }] = await Promise.all([
         supabase.from("activity_logs")
           .select("*")
           .in("entity_id", ids)
           .in("action", ["change_stage", "assign_agent", "reply_message", "delete_chat"])
           .order("created_at", { ascending: false })
           .limit(100),
+        supabase.from("audit_events")
+          .select("*")
+          .eq("contact_id", contact.id)
+          .order("occurred_at", { ascending: false })
+          .limit(200),
         supabase.from("profiles").select("id, full_name, email"),
+        supabase.from("stages").select("id, name"),
+        supabase.from("products").select("id, name"),
       ]);
-      setLogs(lg || []);
       const pm: Record<string, any> = {};
       (profs || []).forEach((p: any) => { pm[p.id] = p; });
+      const sm: Record<string, string> = {};
+      (stagesAll || []).forEach((s: any) => { sm[s.id] = s.name; });
+      const prm: Record<string, string> = {};
+      (prodAll || []).forEach((p: any) => { prm[p.id] = p.name; });
+      // Merge: tag source so renderer knows which schema
+      const merged = [
+        ...((lg || []).map((x: any) => ({ ...x, _src: "log", _ts: x.created_at }))),
+        ...((ev || []).map((x: any) => ({ ...x, _src: "audit", _ts: x.occurred_at, _stages: sm, _products: prm }))),
+      ].sort((a, b) => new Date(b._ts).getTime() - new Date(a._ts).getTime());
+      setLogs(merged);
       setProfMap(pm);
     })();
   }, [contact?.id]);
+
 
   if (!contact || !form) return null;
 
