@@ -25,6 +25,17 @@ const ACTION_META: Record<string, { label: string; icon: any; color: string }> =
   assign_agent: { label: "Mengubah penugasan agent", icon: UserCog, color: "text-violet-600 bg-violet-500/10" },
   change_stage: { label: "Mengubah stage lead", icon: Tag, color: "text-emerald-600 bg-emerald-500/10" },
   delete_chat: { label: "Menghapus percakapan", icon: Trash2, color: "text-red-600 bg-red-500/10" },
+  // audit_events (otomatis dari trigger DB)
+  stage_changed: { label: "Stage berubah (audit)", icon: Tag, color: "text-emerald-600 bg-emerald-500/10" },
+  assigned: { label: "Lead diassign (audit)", icon: UserCog, color: "text-violet-600 bg-violet-500/10" },
+  reassigned: { label: "Lead direassign (audit)", icon: UserCog, color: "text-violet-600 bg-violet-500/10" },
+  conv_assigned: { label: "Chat diambil (audit)", icon: UserCog, color: "text-violet-600 bg-violet-500/10" },
+  conv_takeover: { label: "Chat dialihkan (audit)", icon: UserCog, color: "text-violet-600 bg-violet-500/10" },
+  product_changed: { label: "Produk diubah (audit)", icon: Tag, color: "text-cyan-600 bg-cyan-500/10" },
+  name_changed: { label: "Nama kontak diubah (audit)", icon: Tag, color: "text-cyan-600 bg-cyan-500/10" },
+  contact_created: { label: "Lead baru masuk (audit)", icon: Activity, color: "text-teal-600 bg-teal-500/10" },
+  chat_in: { label: "Pesan masuk (audit)", icon: MessageSquare, color: "text-sky-600 bg-sky-500/10" },
+  chat_out: { label: "Pesan keluar (audit)", icon: MessageSquare, color: "text-blue-600 bg-blue-500/10" },
 };
 
 function todayStr(offset = 0) {
