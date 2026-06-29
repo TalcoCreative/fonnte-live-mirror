@@ -699,35 +699,18 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                       </div>
                     </>
                   )}
-                  {mode === "reply" && (
-                    <Button type="button" size="sm" variant="outline" className="h-7 text-xs gap-1"
-                      onClick={() => fileInputRef.current?.click()}>
-                      <Paperclip className="size-3" /> Lampiran
-                    </Button>
-                  )}
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={onPickFile}
-                    accept="image/*,application/pdf,audio/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" />
                 </div>
-                {pendingFile && (
-                  <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg border bg-muted/40 text-xs">
-                    {pendingFile.type.startsWith("image/") ? <ImageIcon className="size-4 text-primary" /> : <FileText className="size-4 text-primary" />}
-                    <span className="truncate flex-1">{pendingFile.name}</span>
-                    <span className="text-muted-foreground">{(pendingFile.size / 1024).toFixed(0)} KB</span>
-                    <button type="button" onClick={() => setPendingFile(null)} className="text-muted-foreground hover:text-destructive">
-                      <X className="size-3.5" />
-                    </button>
-                  </div>
-                )}
                 <div className="flex gap-2">
                   <Input value={text} onChange={(e) => setText(e.target.value)}
                     placeholder={mode === "note"
                       ? "Catatan internal — hanya dilihat agent..."
-                      : pendingFile ? "Caption (opsional)..." : `Balas sebagai ${agentName(user?.id || null)}...`}
+                      : `Balas sebagai ${agentName(user?.id || null)}...`}
                     disabled={sending}
                     className={mode === "note" ? "bg-amber-50 dark:bg-amber-500/10 border-amber-300" : ""}
                     autoFocus />
-                  <Button type="submit" disabled={sending || (!text.trim() && !pendingFile)}
+                  <Button type="submit" disabled={sending || !text.trim()}
                     className={mode === "note" ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}>
+
                     {sending ? <Loader2 className="size-4 animate-spin" /> :
                       mode === "note" ? <StickyNote className="size-4" /> : <Send className="size-4" />}
                   </Button>
