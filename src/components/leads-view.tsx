@@ -347,6 +347,24 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved 
   }
 
   function actionLabel(l: any) {
+    if (l._src === "audit") {
+      const who = agentName(l.actor_id);
+      const sm = l._stages || {}; const prm = l._products || {};
+      const oldV = l.old_value || {}; const newV = l.new_value || {};
+      switch (l.event_type) {
+        case "contact_created": return <>Lead dibuat: <b>{newV.full_name || newV.whatsapp_number}</b></>;
+        case "stage_changed": return <>Stage diubah oleh <b>{who}</b>: <span className="text-muted-foreground">{sm[oldV.stage_id] || "—"}</span> <ArrowRight className="inline size-3" /> <b>{sm[newV.stage_id] || "—"}</b></>;
+        case "assigned": return <>Ditugaskan oleh <b>{who}</b> ke <b>{agentName(newV.agent_id)}</b></>;
+        case "reassigned": return <>Re-assign oleh <b>{who}</b>: <span className="text-muted-foreground">{agentName(oldV.agent_id)}</span> <ArrowRight className="inline size-3" /> <b>{agentName(newV.agent_id)}</b></>;
+        case "product_changed": return <>Produk diubah oleh <b>{who}</b>: <span className="text-muted-foreground">{prm[oldV.product_id] || "—"}</span> <ArrowRight className="inline size-3" /> <b>{prm[newV.product_id] || "—"}</b></>;
+        case "name_changed": return <>Nama diubah oleh <b>{who}</b>: <span className="text-muted-foreground">{oldV.full_name || "—"}</span> <ArrowRight className="inline size-3" /> <b>{newV.full_name || "—"}</b></>;
+        case "chat_in": return <>Pesan masuk dari customer</>;
+        case "chat_out": return <>Balasan dari <b>{who}</b></>;
+        case "conv_assigned":
+        case "conv_takeover": return <>Conversation di-assign ke <b>{agentName(newV.agent_id)}</b></>;
+        default: return l.event_type;
+      }
+    }
     const m = l.metadata || {};
     const who = agentName(l.user_id);
     if (l.action === "change_stage") return <>Stage diubah oleh <b>{who}</b>: <span className="text-muted-foreground">{m.from_stage || "—"}</span> <ArrowRight className="inline size-3" /> <b>{m.to_stage || "—"}</b></>;
@@ -355,6 +373,7 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved 
     if (l.action === "delete_chat") return <>Chat dihapus oleh <b>{who}</b></>;
     return l.action;
   }
+
 
   return (
     <Dialog open={!!contact} onOpenChange={(v) => !v && onClose()}>
