@@ -335,13 +335,16 @@ async function consumeAnswer(admin: any, step: any, message: string): Promise<{ 
   }
 }
 
-async function sendReply(admin: any, contact: any, convId: string, text: string, api_key?: string) {
+async function sendReply(admin: any, contact: any, convId: string, text: string, api_key?: string, deviceNum?: string) {
   if (!text) return;
   if (!api_key) { console.warn("no api_key, skip send"); return; }
   const fd = new FormData();
   fd.append("target", contact.whatsapp_number);
   fd.append("message", text);
+  if (deviceNum) fd.append("device", String(deviceNum).replace(/\D/g, ""));
+  fd.append("countryCode", "62");
   try {
+
     const fres = await fetch("https://api.fonnte.com/send", { method: "POST", headers: { Authorization: api_key }, body: fd });
     const fdata = await fres.json().catch(() => ({}));
     const fonnteId = Array.isArray(fdata.id) ? String(fdata.id[0]) : (fdata.id ? String(fdata.id) : null);
