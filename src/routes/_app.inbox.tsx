@@ -333,6 +333,24 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     loadConversations();
   }
 
+  async function saveName() {
+    if (!active?.contact_id) { setEditingName(false); return; }
+    const newName = nameDraft.trim();
+    const oldName = active.contact?.full_name || "";
+    if (!newName || newName === oldName) { setEditingName(false); return; }
+    const { error } = await supabase.from("contacts").update({ full_name: newName }).eq("id", active.contact_id);
+    if (error) { toast.error(error.message); return; }
+    await logAction("rename_contact", {
+      contact_id: active.contact_id,
+      whatsapp: active.contact?.whatsapp_number,
+      from_name: oldName, to_name: newName,
+      contact_name: newName,
+    });
+    toast.success("Nama lead diperbarui");
+    setEditingName(false);
+    loadConversations();
+  }
+
   async function deleteConversation() {
     if (!active) return;
     // Delete conversation (cascade removes messages). Reset chatbot_state so the next inbound restarts the bot — but keep the lead (contact) so name/phone/keluhan get UPDATED in place on the next round.
