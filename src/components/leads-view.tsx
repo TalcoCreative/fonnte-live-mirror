@@ -203,6 +203,27 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {checkedIds.size > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="size-4 mr-1.5" /> Hapus {checkedIds.size}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Hapus {checkedIds.size} lead?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tindakan ini permanen. Seluruh percakapan & pesan terkait juga akan terhapus.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => deleteContacts(Array.from(checkedIds))}>Hapus Permanen</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           <Button variant="outline" size="sm" onClick={downloadTemplate}>
             <FileDown className="size-4 mr-1.5" /> Template
           </Button>
