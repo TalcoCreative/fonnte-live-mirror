@@ -1065,11 +1065,13 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                 <thead>
                   <tr className="text-left text-[11px] text-muted-foreground border-b">
                     <th className="py-2 pr-3">Agent</th>
-                    <th className="py-2 pr-3 text-right">Chat Pertama</th>
-                    <th className="py-2 pr-3 text-right">Lanjutan Shift</th>
+                    <th className="py-2 pr-3 text-right">First Resp.</th>
+                    <th className="py-2 pr-3 text-right">Continue</th>
+                    <th className="py-2 pr-3 text-right">Closing</th>
+                    <th className="py-2 pr-3 text-right">Closing Share</th>
                     <th className="py-2 pr-3 text-right">Total Respon</th>
-                    <th className="py-2 pr-3 text-right">Avg Respon</th>
-                    <th className="py-2 pr-3 text-right">Avg Jam Kerja</th>
+                    <th className="py-2 pr-3 text-right">Avg Resp.</th>
+                    <th className="py-2 pr-3 text-right">Avg Handle</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1082,9 +1084,15 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                       <td className="py-2 pr-3 text-right">
                         <Badge className="bg-amber-500/15 text-amber-500 font-mono">{a.continuedFromOther}</Badge>
                       </td>
+                      <td className="py-2 pr-3 text-right">
+                        <Badge className="bg-primary/15 text-primary font-mono">{a.closings}</Badge>
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        <Badge className="bg-fuchsia-500/15 text-fuchsia-500 font-mono">{a.closingShare.toFixed(2)}</Badge>
+                      </td>
                       <td className="py-2 pr-3 text-right font-mono">{a.responses}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.avgRespSec ? fmtTime(a.avgRespSec) : "-"}</td>
-                      <td className="py-2 pr-3 text-right font-mono">{a.avgShiftHours ? `${a.avgShiftHours}j` : "-"}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.avgHandleSec ? fmtTime(a.avgHandleSec) : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
