@@ -311,6 +311,40 @@ function FonnteTab() {
             <Button variant="outline" onClick={testConnection} disabled={testing || !apiKey}>
               {testing && <Loader2 className="size-4 mr-2 animate-spin" />} Test Koneksi
             </Button>
+            {(apiKey || device) && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive">
+                    <Power className="size-4 mr-2" /> Disconnect
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Putuskan koneksi WhatsApp Gateway?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      API key & nomor device akan dihapus dari sistem. Pesan WhatsApp tidak akan terkirim sampai Anda menghubungkan kembali. Anda yakin?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                    <AlertDialogAction onClick={async () => {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      const res = await fetch(`${SUPABASE_URL}/functions/v1/save-fonnte-settings`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+                        body: JSON.stringify({ api_key: "", device: "" }),
+                      });
+                      if (res.ok) {
+                        setApiKey(""); setDevice(""); setTestResult(null);
+                        toast.success("Gateway diputuskan");
+                      } else {
+                        toast.error("Gagal disconnect");
+                      }
+                    }}>Ya, disconnect</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
           {testResult && (
             <div className={`mt-2 p-3 rounded-md text-sm border ${testResult.ok ? "bg-success/10 border-success/30 text-success" : "bg-destructive/10 border-destructive/30 text-destructive"}`}>
