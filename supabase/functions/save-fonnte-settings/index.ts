@@ -37,6 +37,12 @@ Deno.serve(async (req) => {
     const api_key = typeof body.api_key === "string" ? body.api_key.trim() : "";
     const deviceIn = typeof body.device === "string" ? body.device.trim() : "";
 
+    // Disconnect: when both fields cleared, remove stored settings.
+    if (!api_key && !deviceIn) {
+      await admin.from("system_settings").delete().in("key", ["fonnte_api_key", "fonnte_device"]);
+      return j({ ok: true, disconnected: true, device: null });
+    }
+
     let detectedDevice: string | null = null;
     let validateData: any = null;
     let validateOk = false;
