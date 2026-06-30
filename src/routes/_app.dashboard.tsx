@@ -625,12 +625,22 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
 
 /* ============================== FIRST RESPONSE ============================== */
 
-function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
+function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, division }: {
   startISO: string; endISO: string; profiles: Profile[]; scopeIds: Set<string> | null;
+  frUserIds: Set<string>; division: string;
 }) {
   const [data, setData] = useState<any>(null);
   const [slaGreen, setSlaGreen] = useState(5);
   const [slaYellow, setSlaYellow] = useState(10);
+
+  // Auto-scope to FR users when nothing is filtered AND we have FR agents,
+  // OR when division is explicitly set to "First Response".
+  const effectiveScope = useMemo<Set<string> | null>(() => {
+    if (scopeIds) return scopeIds;
+    if (division === "First Response") return frUserIds;
+    if (frUserIds.size > 0) return frUserIds; // default focus on FR team
+    return null;
+  }, [scopeIds, frUserIds, division]);
 
   useEffect(() => {
     (async () => {
@@ -644,26 +654,77 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
 
   useEffect(() => {
     (async () => {
-      const { data: events } = await supabase
-        .from("audit_events")
-        .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value")
-        .gte("occurred_at", startISO).lte("occurred_at", endISO)
-        .order("occurred_at", { ascending: true })
-        .limit(10000);
+      const [evRes, shRes, asRes] = await Promise.all([
+        supabase.from("audit_events")
+          .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value")
+          .gte("occurred_at", startISO).lte("occurred_at", endISO)
+          .order("occurred_at", { ascending: true }).limit(20000),
+        supabase.from("shifts").select("id, name, start_time, end_time"),
+        supabase.from("agent_shifts").select("agent_id, shift_id, effective_from"),
+      ]);
+      const events = evRes.data;
 
       const nameById: Record<string, string> = {};
       profiles.forEach((p) => { nameById[p.id] = p.full_name || p.email || "Agent"; });
 
+      // Shift hours per shift
+      const shiftHours: Record<string, number> = {};
+      (shRes.data || []).forEach((s: any) => {
+        const [sh, sm] = (s.start_time || "00:00:00").split(":").map(Number);
+        const [eh, em] = (s.end_time || "00:00:00").split(":").map(Number);
+        let h = (eh + em / 60) - (sh + sm / 60);
+        if (h <= 0) h += 24; // overnight
+        shiftHours[s.id] = h;
+      });
+      // avg shift hours per agent (across all assigned shifts)
+      const avgShiftByAgent: Record<string, number> = {};
+      const cntShiftByAgent: Record<string, number> = {};
+      (asRes.data || []).forEach((a: any) => {
+        const h = shiftHours[a.shift_id] || 0;
+        avgShiftByAgent[a.agent_id] = (avgShiftByAgent[a.agent_id] || 0) + h;
+        cntShiftByAgent[a.agent_id] = (cntShiftByAgent[a.agent_id] || 0) + 1;
+      });
+
       const evs = (events || []) as any[];
       const newLeads = evs.filter((e) => e.event_type === "contact_created").length;
 
+      // First-responder tracking + continuation
       const inboundFirst: Record<string, number> = {};
       const responses: { contact_id: string; actor_id: string | null; seconds: number; at: string }[] = [];
+      // Track first FR responder per contact (across the full range, not just per-cycle)
+      const firstResponderByContact: Record<string, string> = {};
+      // Per-FR-agent stats
+      type FRStat = { id: string; name: string; firstChats: number; continuedFromOther: number; responses: number; totalSec: number };
+      const fr: Record<string, FRStat> = {};
+      const ensureFR = (id: string) => fr[id] = fr[id] || {
+        id, name: nameById[id] || "Agent",
+        firstChats: 0, continuedFromOther: 0, responses: 0, totalSec: 0,
+      };
+
       for (const e of evs) {
         if (e.event_type === "chat_in" && !inboundFirst[e.contact_id]) {
           inboundFirst[e.contact_id] = new Date(e.occurred_at).getTime();
+        } else if (e.event_type === "chat_out" && e.actor_id && frUserIds.has(e.actor_id)) {
+          const s = ensureFR(e.actor_id);
+          s.responses++;
+          if (firstResponderByContact[e.contact_id]) {
+            if (firstResponderByContact[e.contact_id] !== e.actor_id) s.continuedFromOther++;
+          } else {
+            firstResponderByContact[e.contact_id] = e.actor_id;
+            s.firstChats++;
+          }
+          // First-response time bucket (per cycle) — also feeds leaderboard
+          if (inboundFirst[e.contact_id]) {
+            const seconds = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - inboundFirst[e.contact_id]) / 1000));
+            s.totalSec += seconds;
+            if (!effectiveScope || effectiveScope.has(e.actor_id)) {
+              responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
+            }
+            delete inboundFirst[e.contact_id];
+          }
         } else if (e.event_type === "chat_out" && inboundFirst[e.contact_id] && e.actor_id) {
-          if (scopeIds && !scopeIds.has(e.actor_id)) { delete inboundFirst[e.contact_id]; continue; }
+          // non-FR agent answered (still count if in scope)
+          if (effectiveScope && !effectiveScope.has(e.actor_id)) { delete inboundFirst[e.contact_id]; continue; }
           const seconds = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - inboundFirst[e.contact_id]) / 1000));
           responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
           delete inboundFirst[e.contact_id];
@@ -683,7 +744,6 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
         else slaCount.red++;
       });
 
-      // Hour-buckets infographic
       const hourBuckets = HOUR_BUCKETS.map((b) => ({ label: b.label, count: 0 }));
       responses.forEach((r) => { hourBuckets[bucketIdx(r.seconds)].count++; });
 
@@ -698,6 +758,21 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
       const leaderboard = Object.values(perAgent)
         .map((a) => ({ name: a.name, avg: Math.round(a.total / a.count), count: a.count, slaPct: Math.round((a.green / a.count) * 100) }))
         .sort((a, b) => a.avg - b.avg).slice(0, 10);
+
+      // Compose FR Agent table (always show every FR agent, even if no activity)
+      const frAgents = Array.from(frUserIds).map((id) => {
+        const s = fr[id] || { id, name: nameById[id] || "Agent", firstChats: 0, continuedFromOther: 0, responses: 0, totalSec: 0 };
+        const cnt = cntShiftByAgent[id] || 0;
+        const avgShift = cnt ? (avgShiftByAgent[id] / cnt) : 0;
+        return {
+          id, name: s.name,
+          firstChats: s.firstChats,
+          continuedFromOther: s.continuedFromOther,
+          responses: s.responses,
+          avgRespSec: s.responses ? Math.round(s.totalSec / s.responses) : 0,
+          avgShiftHours: +avgShift.toFixed(2),
+        };
+      }).sort((a, b) => b.firstChats - a.firstChats);
 
       const hourly: Record<number, number> = {};
       for (let h = 0; h < 24; h++) hourly[h] = 0;
@@ -727,10 +802,12 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
       setData({
         newLeads, totalResp, avgSec, unresponded, slaCount,
         leaderboard, hourlyData, trend, hourBuckets,
+        frAgents,
         slaPct: totalResp ? Math.round((slaCount.green / totalResp) * 100) : 0,
       });
     })();
-  }, [startISO, endISO, slaGreen, slaYellow, profiles, scopeIds]);
+  }, [startISO, endISO, slaGreen, slaYellow, profiles, scopeIds, effectiveScope, frUserIds]);
+
 
   if (!data) return <div className="text-muted-foreground py-10 text-center">Memuat...</div>;
   const fmtTime = (s: number) => s < 60 ? `${s}d` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}d` : `${Math.floor(s / 3600)}j ${Math.floor((s % 3600) / 60)}m`;
