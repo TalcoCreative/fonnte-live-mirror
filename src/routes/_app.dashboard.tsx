@@ -1033,7 +1033,20 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
 
 /* ============================== SHARED ============================== */
 
-const tooltipStyle = { background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 } as const;
+const tooltipStyle = {
+  background: "hsl(var(--popover))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: 10,
+  padding: "8px 10px",
+  boxShadow: "0 10px 30px -10px rgba(0,0,0,.35)",
+  color: "hsl(var(--popover-foreground))",
+  fontSize: 12,
+  lineHeight: 1.35,
+} as const;
+const tooltipLabelStyle = { color: "hsl(var(--foreground))", fontWeight: 600, marginBottom: 4 } as const;
+const tooltipItemStyle = { color: "hsl(var(--popover-foreground))", padding: "1px 0" } as const;
+const tooltipWrapperStyle = { zIndex: 60, outline: "none" } as const;
+const tooltipCursor = { fill: "hsl(var(--accent))", opacity: 0.18 } as const;
 
 function StatCard({ icon: Icon, label, value }: { icon: any; label: string; value: any }) {
   return (
