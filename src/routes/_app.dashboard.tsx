@@ -55,20 +55,27 @@ function Dashboard() {
   const [division, setDivision] = useState<string>("all");
   const [agentId, setAgentId] = useState<string>("all");
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [frUserIds, setFrUserIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     supabase.from("profiles").select("id, full_name, email, position").then(({ data }) => setProfiles((data as any) || []));
+    supabase.from("user_roles").select("user_id, role").eq("role", "first_response")
+      .then(({ data }) => setFrUserIds(new Set(((data as any) || []).map((r: any) => r.user_id))));
   }, []);
 
   const divisions = useMemo(() => {
     const s = new Set<string>();
     profiles.forEach((p) => { if (p.position) s.add(p.position); });
-    return Array.from(s).sort();
-  }, [profiles]);
+    const arr = Array.from(s).sort();
+    if (frUserIds.size > 0 && !arr.includes("First Response")) arr.unshift("First Response");
+    return arr;
+  }, [profiles, frUserIds]);
 
   const visibleProfiles = useMemo(() => {
-    return profiles.filter((p) => division === "all" || (p.position || "") === division);
-  }, [profiles, division]);
+    if (division === "all") return profiles;
+    if (division === "First Response") return profiles.filter((p) => frUserIds.has(p.id));
+    return profiles.filter((p) => (p.position || "") === division);
+  }, [profiles, division, frUserIds]);
 
   // reset agent if no longer in division
   useEffect(() => {
@@ -160,7 +167,7 @@ function Dashboard() {
           <OverviewTab user={user} startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} />
         </TabsContent>
         <TabsContent value="first-response" className="space-y-5">
-          <FirstResponseTab startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} />
+          <FirstResponseTab startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} frUserIds={frUserIds} division={division} />
         </TabsContent>
         <TabsContent value="performance" className="space-y-5">
           <PerformanceTab startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} />
@@ -390,7 +397,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="label" fontSize={11} />
                 <YAxis fontSize={11} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="in" name="Masuk" stroke="hsl(var(--primary))" fill="url(#gIn)" strokeWidth={2} />
                 <Area type="monotone" dataKey="out" name="Keluar" stroke="#10b981" fill="url(#gOut)" strokeWidth={2} />
@@ -409,7 +416,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                     <Cell key={i} fill={s.color || "#888"} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-1 mt-2 max-h-32 overflow-auto">
@@ -445,7 +452,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
               <XAxis dataKey="label" fontSize={11} />
               <YAxis fontSize={11} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
               <Bar dataKey="count" radius={[6, 6, 0, 0]}>
                 {(data?.buckets || []).map((_: any, i: number) => <Cell key={i} fill={BUCKET_COLORS[i]} />)}
               </Bar>
@@ -463,7 +470,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis type="number" fontSize={11} />
                 <YAxis type="category" dataKey="name" fontSize={11} width={90} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Bar dataKey="avgMin" name="Menit" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -479,7 +486,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="name" fontSize={10} angle={-20} textAnchor="end" height={60} interval={0} />
                 <YAxis fontSize={11} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Bar dataKey="count" name="Jumlah" radius={[6, 6, 0, 0]}>
                   {(data?.stageDist || []).map((s: any, i: number) => (
                     <Cell key={i} fill={s.color || "hsl(var(--primary))"} />
@@ -506,7 +513,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis type="number" fontSize={11} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" fontSize={11} width={100} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {HOUR_BUCKETS.map((b, i) => (
                   <Bar key={b.label} dataKey={b.label} stackId="a" fill={BUCKET_COLORS[i]} />
@@ -532,7 +539,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis type="number" fontSize={11} />
                   <YAxis type="category" dataKey="edge" fontSize={11} width={160} />
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="avgHours" name="Avg (jam)" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
                   <Bar dataKey="count" name="Jumlah" fill="#10b981" radius={[0, 6, 6, 0]} />
@@ -578,7 +585,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis type="number" fontSize={11} allowDecimals={false} />
                   <YAxis type="category" dataKey="name" fontSize={11} width={100} />
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="historicalUnique" name="Historis (unik)" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
                   <Bar dataKey="currentCount" name="Sedang dipegang" fill="#10b981" radius={[0, 6, 6, 0]} />
@@ -618,12 +625,22 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
 
 /* ============================== FIRST RESPONSE ============================== */
 
-function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
+function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, division }: {
   startISO: string; endISO: string; profiles: Profile[]; scopeIds: Set<string> | null;
+  frUserIds: Set<string>; division: string;
 }) {
   const [data, setData] = useState<any>(null);
   const [slaGreen, setSlaGreen] = useState(5);
   const [slaYellow, setSlaYellow] = useState(10);
+
+  // Auto-scope to FR users when nothing is filtered AND we have FR agents,
+  // OR when division is explicitly set to "First Response".
+  const effectiveScope = useMemo<Set<string> | null>(() => {
+    if (scopeIds) return scopeIds;
+    if (division === "First Response") return frUserIds;
+    if (frUserIds.size > 0) return frUserIds; // default focus on FR team
+    return null;
+  }, [scopeIds, frUserIds, division]);
 
   useEffect(() => {
     (async () => {
@@ -637,26 +654,77 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
 
   useEffect(() => {
     (async () => {
-      const { data: events } = await supabase
-        .from("audit_events")
-        .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value")
-        .gte("occurred_at", startISO).lte("occurred_at", endISO)
-        .order("occurred_at", { ascending: true })
-        .limit(10000);
+      const [evRes, shRes, asRes] = await Promise.all([
+        supabase.from("audit_events")
+          .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value")
+          .gte("occurred_at", startISO).lte("occurred_at", endISO)
+          .order("occurred_at", { ascending: true }).limit(20000),
+        supabase.from("shifts").select("id, name, start_time, end_time"),
+        supabase.from("agent_shifts").select("agent_id, shift_id, effective_from"),
+      ]);
+      const events = evRes.data;
 
       const nameById: Record<string, string> = {};
       profiles.forEach((p) => { nameById[p.id] = p.full_name || p.email || "Agent"; });
 
+      // Shift hours per shift
+      const shiftHours: Record<string, number> = {};
+      (shRes.data || []).forEach((s: any) => {
+        const [sh, sm] = (s.start_time || "00:00:00").split(":").map(Number);
+        const [eh, em] = (s.end_time || "00:00:00").split(":").map(Number);
+        let h = (eh + em / 60) - (sh + sm / 60);
+        if (h <= 0) h += 24; // overnight
+        shiftHours[s.id] = h;
+      });
+      // avg shift hours per agent (across all assigned shifts)
+      const avgShiftByAgent: Record<string, number> = {};
+      const cntShiftByAgent: Record<string, number> = {};
+      (asRes.data || []).forEach((a: any) => {
+        const h = shiftHours[a.shift_id] || 0;
+        avgShiftByAgent[a.agent_id] = (avgShiftByAgent[a.agent_id] || 0) + h;
+        cntShiftByAgent[a.agent_id] = (cntShiftByAgent[a.agent_id] || 0) + 1;
+      });
+
       const evs = (events || []) as any[];
       const newLeads = evs.filter((e) => e.event_type === "contact_created").length;
 
+      // First-responder tracking + continuation
       const inboundFirst: Record<string, number> = {};
       const responses: { contact_id: string; actor_id: string | null; seconds: number; at: string }[] = [];
+      // Track first FR responder per contact (across the full range, not just per-cycle)
+      const firstResponderByContact: Record<string, string> = {};
+      // Per-FR-agent stats
+      type FRStat = { id: string; name: string; firstChats: number; continuedFromOther: number; responses: number; totalSec: number };
+      const fr: Record<string, FRStat> = {};
+      const ensureFR = (id: string) => fr[id] = fr[id] || {
+        id, name: nameById[id] || "Agent",
+        firstChats: 0, continuedFromOther: 0, responses: 0, totalSec: 0,
+      };
+
       for (const e of evs) {
         if (e.event_type === "chat_in" && !inboundFirst[e.contact_id]) {
           inboundFirst[e.contact_id] = new Date(e.occurred_at).getTime();
+        } else if (e.event_type === "chat_out" && e.actor_id && frUserIds.has(e.actor_id)) {
+          const s = ensureFR(e.actor_id);
+          s.responses++;
+          if (firstResponderByContact[e.contact_id]) {
+            if (firstResponderByContact[e.contact_id] !== e.actor_id) s.continuedFromOther++;
+          } else {
+            firstResponderByContact[e.contact_id] = e.actor_id;
+            s.firstChats++;
+          }
+          // First-response time bucket (per cycle) — also feeds leaderboard
+          if (inboundFirst[e.contact_id]) {
+            const seconds = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - inboundFirst[e.contact_id]) / 1000));
+            s.totalSec += seconds;
+            if (!effectiveScope || effectiveScope.has(e.actor_id)) {
+              responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
+            }
+            delete inboundFirst[e.contact_id];
+          }
         } else if (e.event_type === "chat_out" && inboundFirst[e.contact_id] && e.actor_id) {
-          if (scopeIds && !scopeIds.has(e.actor_id)) { delete inboundFirst[e.contact_id]; continue; }
+          // non-FR agent answered (still count if in scope)
+          if (effectiveScope && !effectiveScope.has(e.actor_id)) { delete inboundFirst[e.contact_id]; continue; }
           const seconds = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - inboundFirst[e.contact_id]) / 1000));
           responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
           delete inboundFirst[e.contact_id];
@@ -676,7 +744,6 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
         else slaCount.red++;
       });
 
-      // Hour-buckets infographic
       const hourBuckets = HOUR_BUCKETS.map((b) => ({ label: b.label, count: 0 }));
       responses.forEach((r) => { hourBuckets[bucketIdx(r.seconds)].count++; });
 
@@ -691,6 +758,21 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
       const leaderboard = Object.values(perAgent)
         .map((a) => ({ name: a.name, avg: Math.round(a.total / a.count), count: a.count, slaPct: Math.round((a.green / a.count) * 100) }))
         .sort((a, b) => a.avg - b.avg).slice(0, 10);
+
+      // Compose FR Agent table (always show every FR agent, even if no activity)
+      const frAgents = Array.from(frUserIds).map((id) => {
+        const s = fr[id] || { id, name: nameById[id] || "Agent", firstChats: 0, continuedFromOther: 0, responses: 0, totalSec: 0 };
+        const cnt = cntShiftByAgent[id] || 0;
+        const avgShift = cnt ? (avgShiftByAgent[id] / cnt) : 0;
+        return {
+          id, name: s.name,
+          firstChats: s.firstChats,
+          continuedFromOther: s.continuedFromOther,
+          responses: s.responses,
+          avgRespSec: s.responses ? Math.round(s.totalSec / s.responses) : 0,
+          avgShiftHours: +avgShift.toFixed(2),
+        };
+      }).sort((a, b) => b.firstChats - a.firstChats);
 
       const hourly: Record<number, number> = {};
       for (let h = 0; h < 24; h++) hourly[h] = 0;
@@ -720,10 +802,12 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
       setData({
         newLeads, totalResp, avgSec, unresponded, slaCount,
         leaderboard, hourlyData, trend, hourBuckets,
+        frAgents,
         slaPct: totalResp ? Math.round((slaCount.green / totalResp) * 100) : 0,
       });
     })();
-  }, [startISO, endISO, slaGreen, slaYellow, profiles, scopeIds]);
+  }, [startISO, endISO, slaGreen, slaYellow, profiles, scopeIds, effectiveScope, frUserIds]);
+
 
   if (!data) return <div className="text-muted-foreground py-10 text-center">Memuat...</div>;
   const fmtTime = (s: number) => s < 60 ? `${s}d` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}d` : `${Math.floor(s / 3600)}j ${Math.floor((s % 3600) / 60)}m`;
@@ -761,7 +845,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
               <XAxis dataKey="label" fontSize={11} />
               <YAxis fontSize={11} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
               <Bar dataKey="count" radius={[6, 6, 0, 0]}>
                 {data.hourBuckets.map((_: any, i: number) => <Cell key={i} fill={BUCKET_COLORS[i]} />)}
               </Bar>
@@ -787,7 +871,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                   {slaPie.map((s, i) => <Cell key={i} fill={s.fill} />)}
                 </Bar>
@@ -810,7 +894,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" fill="url(#hourGrad)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -826,7 +910,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Area type="monotone" dataKey="leads" name="Leads Baru" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.25} />
               <Area type="monotone" dataKey="responded" name="Direspon" stroke="#10b981" fill="#10b981" fillOpacity={0.25} />
@@ -855,6 +939,53 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
                   </Badge>
                 </div>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="glow-soft">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="size-4" /> Detail Tim First Response (Historis)
+          </CardTitle>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Chat Pertama = handle pertama untuk lead. Lanjutan Shift = melanjutkan lead yang sebelumnya dipegang FR lain.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {(!data.frAgents || data.frAgents.length === 0) ? (
+            <div className="text-sm text-muted-foreground text-center py-8">Belum ada agent First Response.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] text-muted-foreground border-b">
+                    <th className="py-2 pr-3">Agent</th>
+                    <th className="py-2 pr-3 text-right">Chat Pertama</th>
+                    <th className="py-2 pr-3 text-right">Lanjutan Shift</th>
+                    <th className="py-2 pr-3 text-right">Total Respon</th>
+                    <th className="py-2 pr-3 text-right">Avg Respon</th>
+                    <th className="py-2 pr-3 text-right">Avg Jam Kerja</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.frAgents.map((a: any) => (
+                    <tr key={a.id} className="border-b last:border-0 hover:bg-accent/30">
+                      <td className="py-2 pr-3 font-medium">{a.name}</td>
+                      <td className="py-2 pr-3 text-right">
+                        <Badge className="bg-emerald-500/15 text-emerald-500 font-mono">{a.firstChats}</Badge>
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        <Badge className="bg-amber-500/15 text-amber-500 font-mono">{a.continuedFromOther}</Badge>
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.responses}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.avgRespSec ? fmtTime(a.avgRespSec) : "-"}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.avgShiftHours ? `${a.avgShiftHours}j` : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
@@ -954,7 +1085,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="Reply" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Assign" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -980,7 +1111,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis type="number" fontSize={11} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" fontSize={11} width={100} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {HOUR_BUCKETS.map((b, i) => (
                   <Bar key={b.label} dataKey={b.label} stackId="a" fill={BUCKET_COLORS[i]} />
@@ -1033,7 +1164,20 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
 
 /* ============================== SHARED ============================== */
 
-const tooltipStyle = { background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 } as const;
+const tooltipStyle = {
+  background: "hsl(var(--popover))",
+  border: "1px solid hsl(var(--border))",
+  borderRadius: 10,
+  padding: "8px 10px",
+  boxShadow: "0 10px 30px -10px rgba(0,0,0,.35)",
+  color: "hsl(var(--popover-foreground))",
+  fontSize: 12,
+  lineHeight: 1.35,
+} as const;
+const tooltipLabelStyle = { color: "hsl(var(--foreground))", fontWeight: 600, marginBottom: 4 } as const;
+const tooltipItemStyle = { color: "hsl(var(--popover-foreground))", padding: "1px 0" } as const;
+const tooltipWrapperStyle = { zIndex: 60, outline: "none" } as const;
+const tooltipCursor = { fill: "hsl(var(--accent))", opacity: 0.18 } as const;
 
 function StatCard({ icon: Icon, label, value }: { icon: any; label: string; value: any }) {
   return (

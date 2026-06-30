@@ -61,6 +61,8 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   const [mode, setMode] = useState<ComposeMode>("reply");
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
@@ -331,6 +333,24 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     loadConversations();
   }
 
+  async function saveName() {
+    if (!active?.contact_id) { setEditingName(false); return; }
+    const newName = nameDraft.trim();
+    const oldName = active.contact?.full_name || "";
+    if (!newName || newName === oldName) { setEditingName(false); return; }
+    const { error } = await supabase.from("contacts").update({ full_name: newName }).eq("id", active.contact_id);
+    if (error) { toast.error(error.message); return; }
+    await logAction("rename_contact", {
+      contact_id: active.contact_id,
+      whatsapp: active.contact?.whatsapp_number,
+      from_name: oldName, to_name: newName,
+      contact_name: newName,
+    });
+    toast.success("Nama lead diperbarui");
+    setEditingName(false);
+    loadConversations();
+  }
+
   async function deleteConversation() {
     if (!active) return;
     // Delete conversation (cascade removes messages). Reset chatbot_state so the next inbound restarts the bot — but keep the lead (contact) so name/phone/keluhan get UPDATED in place on the next round.
@@ -479,7 +499,29 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <button className="md:hidden text-xs text-primary mb-1" onClick={() => setActiveId(null)}>← Kembali</button>
-                    <div className="font-semibold text-base truncate">{active.contact?.full_name || "Tanpa nama"}</div>
+                    {editingName ? (
+                      <input
+                        autoFocus
+                        value={nameDraft}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        onBlur={saveName}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); saveName(); }
+                          else if (e.key === "Escape") { setEditingName(false); }
+                        }}
+                        className="font-semibold text-base bg-transparent border-b border-primary focus:outline-none w-full max-w-[260px]"
+                        placeholder="Nama lead"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="font-semibold text-base truncate text-left hover:text-primary transition-colors"
+                        title="Klik untuk ubah nama lead"
+                        onClick={() => { setNameDraft(active.contact?.full_name || ""); setEditingName(true); }}
+                      >
+                        {active.contact?.full_name || "Tanpa nama"}
+                      </button>
+                    )}
                     <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3">
                       <span>{active.contact?.whatsapp_number}</span>
                       {activeProductName && <span>· {activeProductName}</span>}
