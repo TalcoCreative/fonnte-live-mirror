@@ -61,6 +61,8 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [sending, setSending] = useState(false);
   const [text, setText] = useState("");
   const [mode, setMode] = useState<ComposeMode>("reply");
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
