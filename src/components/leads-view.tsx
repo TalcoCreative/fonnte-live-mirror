@@ -319,9 +319,9 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
   );
 }
 
-function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved }: {
+function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved, onDelete }: {
   contact: Contact | null; stages: Stage[]; products: Product[]; agents: Profile[];
-  onClose: () => void; onSaved: () => void;
+  onClose: () => void; onSaved: () => void; onDelete: (id: string) => void;
 }) {
   const navigate = useNavigate();
   const [form, setForm] = useState<any>(null);
