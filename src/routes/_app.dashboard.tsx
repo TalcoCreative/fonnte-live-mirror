@@ -55,20 +55,27 @@ function Dashboard() {
   const [division, setDivision] = useState<string>("all");
   const [agentId, setAgentId] = useState<string>("all");
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [frUserIds, setFrUserIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     supabase.from("profiles").select("id, full_name, email, position").then(({ data }) => setProfiles((data as any) || []));
+    supabase.from("user_roles").select("user_id, role").eq("role", "first_response")
+      .then(({ data }) => setFrUserIds(new Set(((data as any) || []).map((r: any) => r.user_id))));
   }, []);
 
   const divisions = useMemo(() => {
     const s = new Set<string>();
     profiles.forEach((p) => { if (p.position) s.add(p.position); });
-    return Array.from(s).sort();
-  }, [profiles]);
+    const arr = Array.from(s).sort();
+    if (frUserIds.size > 0 && !arr.includes("First Response")) arr.unshift("First Response");
+    return arr;
+  }, [profiles, frUserIds]);
 
   const visibleProfiles = useMemo(() => {
-    return profiles.filter((p) => division === "all" || (p.position || "") === division);
-  }, [profiles, division]);
+    if (division === "all") return profiles;
+    if (division === "First Response") return profiles.filter((p) => frUserIds.has(p.id));
+    return profiles.filter((p) => (p.position || "") === division);
+  }, [profiles, division, frUserIds]);
 
   // reset agent if no longer in division
   useEffect(() => {
