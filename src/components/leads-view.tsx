@@ -5,8 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
-import { Plus, Search, Download, Upload, FileDown, MessageSquare, History, ArrowRight } from "lucide-react";
+import { Plus, Search, Download, Upload, FileDown, MessageSquare, History, ArrowRight, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -35,7 +40,39 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
   const [stageFilter, setStageFilter] = useState("all");
   const [openNew, setOpenNew] = useState(false);
   const [selected, setSelected] = useState<Contact | null>(null);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [form, setForm] = useState({ whatsapp_number: "", full_name: "", domicile: "", notes: "" });
+
+  function toggleCheck(id: string) {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll(ids: string[]) {
+    setCheckedIds((prev) => {
+      const allChecked = ids.every((i) => prev.has(i));
+      if (allChecked) return new Set();
+      return new Set(ids);
+    });
+  }
+  async function deleteContacts(ids: string[]) {
+    if (!ids.length) return;
+    // Delete associated conversations/messages first via cascade or manual
+    const { data: convs } = await supabase.from("conversations").select("id").in("contact_id", ids);
+    const convIds = (convs || []).map((c: any) => c.id);
+    if (convIds.length) {
+      await supabase.from("messages").delete().in("conversation_id", convIds);
+      await supabase.from("conversations").delete().in("id", convIds);
+    }
+    const { error } = await supabase.from("contacts").delete().in("id", ids);
+    if (error) return toast.error(error.message);
+    toast.success(`${ids.length} lead dihapus`);
+    setCheckedIds(new Set());
+    setSelected(null);
+    load();
+  }
 
   async function load() {
     const [c, s, p, pr] = await Promise.all([
@@ -166,6 +203,27 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {checkedIds.size > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="size-4 mr-1.5" /> Hapus {checkedIds.size}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Hapus {checkedIds.size} lead?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tindakan ini permanen. Seluruh percakapan & pesan terkait juga akan terhapus.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => deleteContacts(Array.from(checkedIds))}>Hapus Permanen</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           <Button variant="outline" size="sm" onClick={downloadTemplate}>
             <FileDown className="size-4 mr-1.5" /> Template
           </Button>
@@ -210,6 +268,12 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
           <table className="w-full text-sm">
             <thead className="bg-muted text-muted-foreground">
               <tr>
+                <th className="p-3 w-10">
+                  <Checkbox
+                    checked={filtered.length > 0 && filtered.every((c) => checkedIds.has(c.id))}
+                    onCheckedChange={() => toggleAll(filtered.map((c) => c.id))}
+                  />
+                </th>
                 <th className="text-left p-3 font-medium">Nama</th>
                 <th className="text-left p-3 font-medium">No WhatsApp</th>
                 <th className="text-left p-3 font-medium">Produk</th>
@@ -220,19 +284,22 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr key={c.id} onClick={() => setSelected(c)} className="border-t hover:bg-accent/40 cursor-pointer">
-                  <td className="p-3 font-medium">{c.full_name || "—"}</td>
-                  <td className="p-3 text-muted-foreground">{c.whatsapp_number}</td>
-                  <td className="p-3">{products.find(p => p.id === c.interested_product_id)?.name || "—"}</td>
-                  <td className="p-3">
+                <tr key={c.id} className="border-t hover:bg-accent/40">
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox checked={checkedIds.has(c.id)} onCheckedChange={() => toggleCheck(c.id)} />
+                  </td>
+                  <td className="p-3 font-medium cursor-pointer" onClick={() => setSelected(c)}>{c.full_name || "—"}</td>
+                  <td className="p-3 text-muted-foreground cursor-pointer" onClick={() => setSelected(c)}>{c.whatsapp_number}</td>
+                  <td className="p-3 cursor-pointer" onClick={() => setSelected(c)}>{products.find(p => p.id === c.interested_product_id)?.name || "—"}</td>
+                  <td className="p-3 cursor-pointer" onClick={() => setSelected(c)}>
                     {c.stages && <Badge style={{ background: c.stages.color, color: "white" }}>{c.stages.name}</Badge>}
                   </td>
-                  <td className="p-3 text-right">Rp {Number(c.estimated_revenue || 0).toLocaleString("id-ID")}</td>
-                  <td className="p-3 text-xs text-muted-foreground">{c.source || "—"}</td>
+                  <td className="p-3 text-right cursor-pointer" onClick={() => setSelected(c)}>Rp {Number(c.estimated_revenue || 0).toLocaleString("id-ID")}</td>
+                  <td className="p-3 text-xs text-muted-foreground cursor-pointer" onClick={() => setSelected(c)}>{c.source || "—"}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Belum ada lead.</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Belum ada lead.</td></tr>
               )}
             </tbody>
           </table>
@@ -245,15 +312,16 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
         products={products}
         agents={agents}
         onClose={() => setSelected(null)}
+        onDelete={(id) => deleteContacts([id])}
         onSaved={() => { load(); setSelected(null); }}
       />
     </div>
   );
 }
 
-function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved }: {
+function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved, onDelete }: {
   contact: Contact | null; stages: Stage[]; products: Product[]; agents: Profile[];
-  onClose: () => void; onSaved: () => void;
+  onClose: () => void; onSaved: () => void; onDelete: (id: string) => void;
 }) {
   const navigate = useNavigate();
   const [form, setForm] = useState<any>(null);
@@ -433,9 +501,28 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved 
           )}
         </div>
 
-        <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background">
-          <Button variant="outline" onClick={onClose}>Tutup</Button>
-          <Button onClick={save}>Simpan Perubahan</Button>
+        <div className="flex justify-between gap-2 pt-4 sticky bottom-0 bg-background">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm"><Trash2 className="size-4 mr-1.5" /> Hapus Lead</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Hapus lead "{form.full_name || form.whatsapp_number}"?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tindakan ini permanen. Semua percakapan & pesan terkait juga akan terhapus.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Batal</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete(contact!.id)}>Hapus Permanen</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Tutup</Button>
+            <Button onClick={save}>Simpan Perubahan</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

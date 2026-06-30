@@ -654,29 +654,35 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
 
   useEffect(() => {
     (async () => {
-      const [evRes, shRes, asRes] = await Promise.all([
+      const [evRes, shRes, asRes, stRes, ctRes] = await Promise.all([
         supabase.from("audit_events")
-          .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value")
+          .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value, old_value")
           .gte("occurred_at", startISO).lte("occurred_at", endISO)
           .order("occurred_at", { ascending: true }).limit(20000),
         supabase.from("shifts").select("id, name, start_time, end_time"),
         supabase.from("agent_shifts").select("agent_id, shift_id, effective_from"),
+        supabase.from("stages").select("id, name, order_index"),
+        supabase.from("contacts").select("id, full_name, whatsapp_number, stage_id"),
       ]);
       const events = evRes.data;
+      const stagesAll = (stRes.data || []) as any[];
+      const stageById: Record<string, any> = {};
+      stagesAll.forEach((s) => { stageById[s.id] = s; });
+      const frStageIds = new Set(stagesAll.filter((s) => /first response/i.test(s.name)).map((s) => s.id));
+      const contactById: Record<string, any> = {};
+      (ctRes.data || []).forEach((c: any) => { contactById[c.id] = c; });
 
       const nameById: Record<string, string> = {};
       profiles.forEach((p) => { nameById[p.id] = p.full_name || p.email || "Agent"; });
 
-      // Shift hours per shift
       const shiftHours: Record<string, number> = {};
       (shRes.data || []).forEach((s: any) => {
         const [sh, sm] = (s.start_time || "00:00:00").split(":").map(Number);
         const [eh, em] = (s.end_time || "00:00:00").split(":").map(Number);
         let h = (eh + em / 60) - (sh + sm / 60);
-        if (h <= 0) h += 24; // overnight
+        if (h <= 0) h += 24;
         shiftHours[s.id] = h;
       });
-      // avg shift hours per agent (across all assigned shifts)
       const avgShiftByAgent: Record<string, number> = {};
       const cntShiftByAgent: Record<string, number> = {};
       (asRes.data || []).forEach((a: any) => {
@@ -688,17 +694,25 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
       const evs = (events || []) as any[];
       const newLeads = evs.filter((e) => e.event_type === "contact_created").length;
 
-      // First-responder tracking + continuation
       const inboundFirst: Record<string, number> = {};
       const responses: { contact_id: string; actor_id: string | null; seconds: number; at: string }[] = [];
-      // Track first FR responder per contact (across the full range, not just per-cycle)
       const firstResponderByContact: Record<string, string> = {};
-      // Per-FR-agent stats
-      type FRStat = { id: string; name: string; firstChats: number; continuedFromOther: number; responses: number; totalSec: number };
+      // Track ownership history (ordered unique FR owners per contact)
+      const ownerHistory: Record<string, string[]> = {};
+      const firstHandleAt: Record<string, number> = {};
+
+      type FRStat = {
+        id: string; name: string;
+        firstChats: number; continuedFromOther: number; responses: number;
+        totalSec: number; closings: number; closingShare: number; closingLogs: any[]; shareLogs: any[];
+        totalHandleSec: number; handleCount: number;
+      };
       const fr: Record<string, FRStat> = {};
       const ensureFR = (id: string) => fr[id] = fr[id] || {
         id, name: nameById[id] || "Agent",
         firstChats: 0, continuedFromOther: 0, responses: 0, totalSec: 0,
+        closings: 0, closingShare: 0, closingLogs: [], shareLogs: [],
+        totalHandleSec: 0, handleCount: 0,
       };
 
       for (const e of evs) {
@@ -707,13 +721,16 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
         } else if (e.event_type === "chat_out" && e.actor_id && frUserIds.has(e.actor_id)) {
           const s = ensureFR(e.actor_id);
           s.responses++;
+          // Track owner history (unique, ordered)
+          const hist = ownerHistory[e.contact_id] = ownerHistory[e.contact_id] || [];
+          if (hist[hist.length - 1] !== e.actor_id) hist.push(e.actor_id);
           if (firstResponderByContact[e.contact_id]) {
             if (firstResponderByContact[e.contact_id] !== e.actor_id) s.continuedFromOther++;
           } else {
             firstResponderByContact[e.contact_id] = e.actor_id;
             s.firstChats++;
+            firstHandleAt[e.contact_id] = new Date(e.occurred_at).getTime();
           }
-          // First-response time bucket (per cycle) — also feeds leaderboard
           if (inboundFirst[e.contact_id]) {
             const seconds = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - inboundFirst[e.contact_id]) / 1000));
             s.totalSec += seconds;
@@ -723,11 +740,52 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
             delete inboundFirst[e.contact_id];
           }
         } else if (e.event_type === "chat_out" && inboundFirst[e.contact_id] && e.actor_id) {
-          // non-FR agent answered (still count if in scope)
           if (effectiveScope && !effectiveScope.has(e.actor_id)) { delete inboundFirst[e.contact_id]; continue; }
           const seconds = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - inboundFirst[e.contact_id]) / 1000));
           responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
           delete inboundFirst[e.contact_id];
+        } else if (e.event_type === "stage_changed" && e.actor_id && frUserIds.has(e.actor_id)) {
+          const newStageId = e.new_value?.stage_id;
+          const oldStageId = e.old_value?.stage_id;
+          // Closing: stage moves from FR stage to non-FR stage
+          if (newStageId && !frStageIds.has(newStageId) && (!oldStageId || frStageIds.has(oldStageId) || ownerHistory[e.contact_id])) {
+            const closer = ensureFR(e.actor_id);
+            closer.closings++;
+            const contributors = (ownerHistory[e.contact_id] || []).slice();
+            if (!contributors.includes(e.actor_id)) contributors.push(e.actor_id);
+            const share = contributors.length ? 1 / contributors.length : 0;
+            const contact = contactById[e.contact_id] || {};
+            const handleSec = firstHandleAt[e.contact_id]
+              ? Math.round((new Date(e.occurred_at).getTime() - firstHandleAt[e.contact_id]) / 1000) : 0;
+            if (handleSec > 0) { closer.totalHandleSec += handleSec; closer.handleCount++; }
+            const closingLog = {
+              contact_id: e.contact_id,
+              customer: contact.full_name || contact.whatsapp_number || "—",
+              at: e.occurred_at,
+              to_stage: stageById[newStageId]?.name || "—",
+              handle_sec: handleSec,
+              contributors: contributors.map((id) => nameById[id] || id),
+            };
+            closer.closingLogs.push(closingLog);
+            // Closing share for each contributor
+            for (const cid of contributors) {
+              const c = ensureFR(cid);
+              c.closingShare += share;
+              c.shareLogs.push({
+                contact_id: e.contact_id,
+                customer: contact.full_name || contact.whatsapp_number || "—",
+                role: cid === firstResponderByContact[e.contact_id] ? "First Response" : "Continue",
+                contributors_count: contributors.length,
+                share,
+                closing_by: nameById[e.actor_id] || "—",
+                at: e.occurred_at,
+              });
+            }
+            // Reset ownership cycle so subsequent re-opens count separately
+            delete ownerHistory[e.contact_id];
+            delete firstResponderByContact[e.contact_id];
+            delete firstHandleAt[e.contact_id];
+          }
         }
       }
 
@@ -759,9 +817,15 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
         .map((a) => ({ name: a.name, avg: Math.round(a.total / a.count), count: a.count, slaPct: Math.round((a.green / a.count) * 100) }))
         .sort((a, b) => a.avg - b.avg).slice(0, 10);
 
-      // Compose FR Agent table (always show every FR agent, even if no activity)
-      const frAgents = Array.from(frUserIds).map((id) => {
-        const s = fr[id] || { id, name: nameById[id] || "Agent", firstChats: 0, continuedFromOther: 0, responses: 0, totalSec: 0 };
+      // FR list — apply scope filter to KPIs
+      const frInScope = Array.from(frUserIds).filter((id) => !effectiveScope || effectiveScope.has(id));
+      const frAgents = frInScope.map((id) => {
+        const s = fr[id] || {
+          id, name: nameById[id] || "Agent",
+          firstChats: 0, continuedFromOther: 0, responses: 0, totalSec: 0,
+          closings: 0, closingShare: 0, closingLogs: [], shareLogs: [],
+          totalHandleSec: 0, handleCount: 0,
+        };
         const cnt = cntShiftByAgent[id] || 0;
         const avgShift = cnt ? (avgShiftByAgent[id] / cnt) : 0;
         return {
@@ -769,10 +833,36 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           firstChats: s.firstChats,
           continuedFromOther: s.continuedFromOther,
           responses: s.responses,
+          closings: s.closings,
+          closingShare: +s.closingShare.toFixed(4),
+          closingLogs: s.closingLogs,
+          shareLogs: s.shareLogs,
           avgRespSec: s.responses ? Math.round(s.totalSec / s.responses) : 0,
+          avgHandleSec: s.handleCount ? Math.round(s.totalHandleSec / s.handleCount) : 0,
           avgShiftHours: +avgShift.toFixed(2),
         };
       }).sort((a, b) => b.firstChats - a.firstChats);
+
+      // Aggregate KPIs
+      const totalFirst = frAgents.reduce((s, a) => s + a.firstChats, 0);
+      const totalContinue = frAgents.reduce((s, a) => s + a.continuedFromOther, 0);
+      const totalClosing = frAgents.reduce((s, a) => s + a.closings, 0);
+      const totalShare = +frAgents.reduce((s, a) => s + a.closingShare, 0).toFixed(2);
+      const avgHandle = (() => {
+        const list = frAgents.filter((a) => a.avgHandleSec > 0);
+        return list.length ? Math.round(list.reduce((s, a) => s + a.avgHandleSec, 0) / list.length) : 0;
+      })();
+      // Hanging: leads where FR was owner but still in FR stage and no closing recorded
+      const hangingSet = new Set<string>();
+      Object.entries(firstResponderByContact).forEach(([cid, ownerId]) => {
+        if (effectiveScope && !effectiveScope.has(ownerId)) return;
+        const contact = contactById[cid];
+        if (contact && contact.stage_id && frStageIds.has(contact.stage_id)) hangingSet.add(cid);
+      });
+      const hanging = hangingSet.size;
+      const totalLeadsHandled = new Set(Object.keys(ownerHistory).concat(Object.keys(firstResponderByContact))).size;
+      const activeFRCount = frInScope.length;
+      const avgLeadsPerFR = activeFRCount ? +(totalLeadsHandled / activeFRCount).toFixed(2) : 0;
 
       const hourly: Record<number, number> = {};
       for (let h = 0; h < 24; h++) hourly[h] = 0;
@@ -803,6 +893,8 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
         newLeads, totalResp, avgSec, unresponded, slaCount,
         leaderboard, hourlyData, trend, hourBuckets,
         frAgents,
+        totalFirst, totalContinue, totalClosing, totalShare, avgHandle,
+        hanging, avgLeadsPerFR,
         slaPct: totalResp ? Math.round((slaCount.green / totalResp) * 100) : 0,
       });
     })();
@@ -819,6 +911,17 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
 
   return (
     <>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KPI icon={MessageCircle} label="Total First Response" value={data.totalFirst} color="text-emerald-500" />
+        <KPI icon={ArrowRightLeft} label="Continue Conversation" value={data.totalContinue} color="text-amber-500" />
+        <KPI icon={CheckCircle2} label="Total Closing" value={data.totalClosing} color="text-primary" />
+        <KPI icon={Trophy} label="Closing Share" value={data.totalShare} color="text-fuchsia-500" />
+        <KPI icon={AlertTriangle} label="Hanging Conv." value={data.hanging} color="text-rose-500" />
+        <KPI icon={Timer} label="Avg First Response" value={fmtTime(data.avgSec)} color="text-emerald-500" />
+        <KPI icon={Clock} label="Avg Handle Time" value={fmtTime(data.avgHandle)} color="text-blue-500" />
+        <KPI icon={Users} label="Avg Leads / FR Agent" value={data.avgLeadsPerFR} color="text-primary" />
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <KPI icon={MessageCircle} label="Leads Baru" value={data.newLeads} color="text-blue-500" />
         <KPI icon={UserCheck} label="Sudah Dijawab" value={data.totalResp} color="text-emerald-500" />
@@ -962,11 +1065,13 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                 <thead>
                   <tr className="text-left text-[11px] text-muted-foreground border-b">
                     <th className="py-2 pr-3">Agent</th>
-                    <th className="py-2 pr-3 text-right">Chat Pertama</th>
-                    <th className="py-2 pr-3 text-right">Lanjutan Shift</th>
+                    <th className="py-2 pr-3 text-right">First Resp.</th>
+                    <th className="py-2 pr-3 text-right">Continue</th>
+                    <th className="py-2 pr-3 text-right">Closing</th>
+                    <th className="py-2 pr-3 text-right">Closing Share</th>
                     <th className="py-2 pr-3 text-right">Total Respon</th>
-                    <th className="py-2 pr-3 text-right">Avg Respon</th>
-                    <th className="py-2 pr-3 text-right">Avg Jam Kerja</th>
+                    <th className="py-2 pr-3 text-right">Avg Resp.</th>
+                    <th className="py-2 pr-3 text-right">Avg Handle</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -979,9 +1084,15 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                       <td className="py-2 pr-3 text-right">
                         <Badge className="bg-amber-500/15 text-amber-500 font-mono">{a.continuedFromOther}</Badge>
                       </td>
+                      <td className="py-2 pr-3 text-right">
+                        <Badge className="bg-primary/15 text-primary font-mono">{a.closings}</Badge>
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        <Badge className="bg-fuchsia-500/15 text-fuchsia-500 font-mono">{a.closingShare.toFixed(2)}</Badge>
+                      </td>
                       <td className="py-2 pr-3 text-right font-mono">{a.responses}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.avgRespSec ? fmtTime(a.avgRespSec) : "-"}</td>
-                      <td className="py-2 pr-3 text-right font-mono">{a.avgShiftHours ? `${a.avgShiftHours}j` : "-"}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.avgHandleSec ? fmtTime(a.avgHandleSec) : "-"}</td>
                     </tr>
                   ))}
                 </tbody>

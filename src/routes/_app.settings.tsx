@@ -8,8 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 // tabs replaced with custom pill nav
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Loader2, Copy, ExternalLink, MessageCircle } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Copy, ExternalLink, MessageCircle, Send, Power } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { WorkflowBuilderTab } from "@/components/workflow-builder";
 
 export const Route = createFileRoute("/_app/settings")({
@@ -306,6 +311,40 @@ function FonnteTab() {
             <Button variant="outline" onClick={testConnection} disabled={testing || !apiKey}>
               {testing && <Loader2 className="size-4 mr-2 animate-spin" />} Test Koneksi
             </Button>
+            {(apiKey || device) && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive">
+                    <Power className="size-4 mr-2" /> Disconnect
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Putuskan koneksi WhatsApp Gateway?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      API key & nomor device akan dihapus dari sistem. Pesan WhatsApp tidak akan terkirim sampai Anda menghubungkan kembali. Anda yakin?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Batal</AlertDialogCancel>
+                    <AlertDialogAction onClick={async () => {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      const res = await fetch(`${SUPABASE_URL}/functions/v1/save-fonnte-settings`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+                        body: JSON.stringify({ api_key: "", device: "" }),
+                      });
+                      if (res.ok) {
+                        setApiKey(""); setDevice(""); setTestResult(null);
+                        toast.success("Gateway diputuskan");
+                      } else {
+                        toast.error("Gagal disconnect");
+                      }
+                    }}>Ya, disconnect</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
           {testResult && (
             <div className={`mt-2 p-3 rounded-md text-sm border ${testResult.ok ? "bg-success/10 border-success/30 text-success" : "bg-destructive/10 border-destructive/30 text-destructive"}`}>
@@ -601,6 +640,7 @@ function TeamTab() {
                       }
                     }}
                   />
+                  <TestNotifyButton agent={r} />
                   <Button
                     size="sm" variant="ghost"
                     className="text-destructive hover:bg-destructive/10"
@@ -961,4 +1001,69 @@ function WorkflowTab() {
     </div>
   );
 }
+
+function TestNotifyButton({ agent }: { agent: any }) {
+  const [open, setOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [customMsg, setCustomMsg] = useState("");
+
+  const defaultMsg = `Hi ${agent.full_name || "Agent"}, ini pesan test penugasan dari CRM Husada. Jika kamu menerima pesan ini, berarti nomor WhatsApp kamu sudah terhubung dengan benar.`;
+
+  async function send() {
+    if (!agent.phone) {
+      toast.error("Agent belum punya nomor WhatsApp. Isi dulu di kolom 62...");
+      return;
+    }
+    setSending(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-agent-assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({
+        test: true,
+        agent_id: agent.id,
+        message: customMsg.trim() || defaultMsg,
+      }),
+    });
+    const j = await res.json();
+    setSending(false);
+    if (res.ok && j.ok) {
+      toast.success(`Pesan test terkirim ke ${agent.full_name}`);
+      setOpen(false);
+    } else {
+      toast.error(j.error || j.skipped || "Gagal kirim. Cek API key & nomor agent.");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" disabled={!agent.phone} title={!agent.phone ? "Isi nomor WhatsApp dulu" : "Kirim pesan test"}>
+          <Send className="size-3.5 mr-1" /> Test
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Test Kirim Notif ke {agent.full_name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="text-sm text-muted-foreground">
+            Nomor: <span className="font-mono">{agent.phone || "—"}</span>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Pesan (opsional, kosongkan untuk default)</Label>
+            <Textarea rows={4} placeholder={defaultMsg} value={customMsg} onChange={(e) => setCustomMsg(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Batal</Button>
+          <Button onClick={send} disabled={sending}>
+            {sending && <Loader2 className="size-4 mr-2 animate-spin" />} Kirim Test
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
