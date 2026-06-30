@@ -911,6 +911,17 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
 
   return (
     <>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KPI icon={MessageCircle} label="Total First Response" value={data.totalFirst} color="text-emerald-500" />
+        <KPI icon={ArrowRightLeft} label="Continue Conversation" value={data.totalContinue} color="text-amber-500" />
+        <KPI icon={CheckCircle2} label="Total Closing" value={data.totalClosing} color="text-primary" />
+        <KPI icon={Trophy} label="Closing Share" value={data.totalShare} color="text-fuchsia-500" />
+        <KPI icon={AlertTriangle} label="Hanging Conv." value={data.hanging} color="text-rose-500" />
+        <KPI icon={Timer} label="Avg First Response" value={fmtTime(data.avgSec)} color="text-emerald-500" />
+        <KPI icon={Clock} label="Avg Handle Time" value={fmtTime(data.avgHandle)} color="text-blue-500" />
+        <KPI icon={Users} label="Avg Leads / FR Agent" value={data.avgLeadsPerFR} color="text-primary" />
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <KPI icon={MessageCircle} label="Leads Baru" value={data.newLeads} color="text-blue-500" />
         <KPI icon={UserCheck} label="Sudah Dijawab" value={data.totalResp} color="text-emerald-500" />
