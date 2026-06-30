@@ -499,7 +499,29 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <button className="md:hidden text-xs text-primary mb-1" onClick={() => setActiveId(null)}>← Kembali</button>
-                    <div className="font-semibold text-base truncate">{active.contact?.full_name || "Tanpa nama"}</div>
+                    {editingName ? (
+                      <input
+                        autoFocus
+                        value={nameDraft}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        onBlur={saveName}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); saveName(); }
+                          else if (e.key === "Escape") { setEditingName(false); }
+                        }}
+                        className="font-semibold text-base bg-transparent border-b border-primary focus:outline-none w-full max-w-[260px]"
+                        placeholder="Nama lead"
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="font-semibold text-base truncate text-left hover:text-primary transition-colors"
+                        title="Klik untuk ubah nama lead"
+                        onClick={() => { setNameDraft(active.contact?.full_name || ""); setEditingName(true); }}
+                      >
+                        {active.contact?.full_name || "Tanpa nama"}
+                      </button>
+                    )}
                     <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3">
                       <span>{active.contact?.whatsapp_number}</span>
                       {activeProductName && <span>· {activeProductName}</span>}
