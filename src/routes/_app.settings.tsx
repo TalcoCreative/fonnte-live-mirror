@@ -640,6 +640,7 @@ function TeamTab() {
                       }
                     }}
                   />
+                  <TestNotifyButton agent={r} />
                   <Button
                     size="sm" variant="ghost"
                     className="text-destructive hover:bg-destructive/10"
