@@ -268,6 +268,12 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
           <table className="w-full text-sm">
             <thead className="bg-muted text-muted-foreground">
               <tr>
+                <th className="p-3 w-10">
+                  <Checkbox
+                    checked={filtered.length > 0 && filtered.every((c) => checkedIds.has(c.id))}
+                    onCheckedChange={() => toggleAll(filtered.map((c) => c.id))}
+                  />
+                </th>
                 <th className="text-left p-3 font-medium">Nama</th>
                 <th className="text-left p-3 font-medium">No WhatsApp</th>
                 <th className="text-left p-3 font-medium">Produk</th>
@@ -278,19 +284,22 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr key={c.id} onClick={() => setSelected(c)} className="border-t hover:bg-accent/40 cursor-pointer">
-                  <td className="p-3 font-medium">{c.full_name || "—"}</td>
-                  <td className="p-3 text-muted-foreground">{c.whatsapp_number}</td>
-                  <td className="p-3">{products.find(p => p.id === c.interested_product_id)?.name || "—"}</td>
-                  <td className="p-3">
+                <tr key={c.id} className="border-t hover:bg-accent/40">
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox checked={checkedIds.has(c.id)} onCheckedChange={() => toggleCheck(c.id)} />
+                  </td>
+                  <td className="p-3 font-medium cursor-pointer" onClick={() => setSelected(c)}>{c.full_name || "—"}</td>
+                  <td className="p-3 text-muted-foreground cursor-pointer" onClick={() => setSelected(c)}>{c.whatsapp_number}</td>
+                  <td className="p-3 cursor-pointer" onClick={() => setSelected(c)}>{products.find(p => p.id === c.interested_product_id)?.name || "—"}</td>
+                  <td className="p-3 cursor-pointer" onClick={() => setSelected(c)}>
                     {c.stages && <Badge style={{ background: c.stages.color, color: "white" }}>{c.stages.name}</Badge>}
                   </td>
-                  <td className="p-3 text-right">Rp {Number(c.estimated_revenue || 0).toLocaleString("id-ID")}</td>
-                  <td className="p-3 text-xs text-muted-foreground">{c.source || "—"}</td>
+                  <td className="p-3 text-right cursor-pointer" onClick={() => setSelected(c)}>Rp {Number(c.estimated_revenue || 0).toLocaleString("id-ID")}</td>
+                  <td className="p-3 text-xs text-muted-foreground cursor-pointer" onClick={() => setSelected(c)}>{c.source || "—"}</td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Belum ada lead.</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Belum ada lead.</td></tr>
               )}
             </tbody>
           </table>
@@ -303,6 +312,7 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
         products={products}
         agents={agents}
         onClose={() => setSelected(null)}
+        onDelete={(id) => deleteContacts([id])}
         onSaved={() => { load(); setSelected(null); }}
       />
     </div>
