@@ -501,9 +501,28 @@ function LeadDetailDialog({ contact, stages, products, agents, onClose, onSaved,
           )}
         </div>
 
-        <div className="flex justify-end gap-2 pt-4 sticky bottom-0 bg-background">
-          <Button variant="outline" onClick={onClose}>Tutup</Button>
-          <Button onClick={save}>Simpan Perubahan</Button>
+        <div className="flex justify-between gap-2 pt-4 sticky bottom-0 bg-background">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm"><Trash2 className="size-4 mr-1.5" /> Hapus Lead</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Hapus lead "{form.full_name || form.whatsapp_number}"?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tindakan ini permanen. Semua percakapan & pesan terkait juga akan terhapus.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Batal</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete(contact!.id)}>Hapus Permanen</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Tutup</Button>
+            <Button onClick={save}>Simpan Perubahan</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
