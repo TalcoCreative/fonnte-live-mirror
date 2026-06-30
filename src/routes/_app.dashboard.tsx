@@ -943,6 +943,53 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           )}
         </CardContent>
       </Card>
+
+      <Card className="glow-soft">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Users className="size-4" /> Detail Tim First Response (Historis)
+          </CardTitle>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Chat Pertama = handle pertama untuk lead. Lanjutan Shift = melanjutkan lead yang sebelumnya dipegang FR lain.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {(!data.frAgents || data.frAgents.length === 0) ? (
+            <div className="text-sm text-muted-foreground text-center py-8">Belum ada agent First Response.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] text-muted-foreground border-b">
+                    <th className="py-2 pr-3">Agent</th>
+                    <th className="py-2 pr-3 text-right">Chat Pertama</th>
+                    <th className="py-2 pr-3 text-right">Lanjutan Shift</th>
+                    <th className="py-2 pr-3 text-right">Total Respon</th>
+                    <th className="py-2 pr-3 text-right">Avg Respon</th>
+                    <th className="py-2 pr-3 text-right">Avg Jam Kerja</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.frAgents.map((a: any) => (
+                    <tr key={a.id} className="border-b last:border-0 hover:bg-accent/30">
+                      <td className="py-2 pr-3 font-medium">{a.name}</td>
+                      <td className="py-2 pr-3 text-right">
+                        <Badge className="bg-emerald-500/15 text-emerald-500 font-mono">{a.firstChats}</Badge>
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        <Badge className="bg-amber-500/15 text-amber-500 font-mono">{a.continuedFromOther}</Badge>
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.responses}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.avgRespSec ? fmtTime(a.avgRespSec) : "-"}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.avgShiftHours ? `${a.avgShiftHours}j` : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }
