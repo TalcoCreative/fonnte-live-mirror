@@ -40,7 +40,39 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
   const [stageFilter, setStageFilter] = useState("all");
   const [openNew, setOpenNew] = useState(false);
   const [selected, setSelected] = useState<Contact | null>(null);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [form, setForm] = useState({ whatsapp_number: "", full_name: "", domicile: "", notes: "" });
+
+  function toggleCheck(id: string) {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function toggleAll(ids: string[]) {
+    setCheckedIds((prev) => {
+      const allChecked = ids.every((i) => prev.has(i));
+      if (allChecked) return new Set();
+      return new Set(ids);
+    });
+  }
+  async function deleteContacts(ids: string[]) {
+    if (!ids.length) return;
+    // Delete associated conversations/messages first via cascade or manual
+    const { data: convs } = await supabase.from("conversations").select("id").in("contact_id", ids);
+    const convIds = (convs || []).map((c: any) => c.id);
+    if (convIds.length) {
+      await supabase.from("messages").delete().in("conversation_id", convIds);
+      await supabase.from("conversations").delete().in("id", convIds);
+    }
+    const { error } = await supabase.from("contacts").delete().in("id", ids);
+    if (error) return toast.error(error.message);
+    toast.success(`${ids.length} lead dihapus`);
+    setCheckedIds(new Set());
+    setSelected(null);
+    load();
+  }
 
   async function load() {
     const [c, s, p, pr] = await Promise.all([
