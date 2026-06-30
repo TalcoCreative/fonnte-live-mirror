@@ -1002,3 +1002,68 @@ function WorkflowTab() {
   );
 }
 
+function TestNotifyButton({ agent }: { agent: any }) {
+  const [open, setOpen] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [customMsg, setCustomMsg] = useState("");
+
+  const defaultMsg = `Hi ${agent.full_name || "Agent"}, ini pesan test penugasan dari CRM Husada. Jika kamu menerima pesan ini, berarti nomor WhatsApp kamu sudah terhubung dengan benar.`;
+
+  async function send() {
+    if (!agent.phone) {
+      toast.error("Agent belum punya nomor WhatsApp. Isi dulu di kolom 62...");
+      return;
+    }
+    setSending(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-agent-assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({
+        test: true,
+        agent_id: agent.id,
+        message: customMsg.trim() || defaultMsg,
+      }),
+    });
+    const j = await res.json();
+    setSending(false);
+    if (res.ok && j.ok) {
+      toast.success(`Pesan test terkirim ke ${agent.full_name}`);
+      setOpen(false);
+    } else {
+      toast.error(j.error || j.skipped || "Gagal kirim. Cek API key & nomor agent.");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" disabled={!agent.phone} title={!agent.phone ? "Isi nomor WhatsApp dulu" : "Kirim pesan test"}>
+          <Send className="size-3.5 mr-1" /> Test
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Test Kirim Notif ke {agent.full_name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="text-sm text-muted-foreground">
+            Nomor: <span className="font-mono">{agent.phone || "—"}</span>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Pesan (opsional, kosongkan untuk default)</Label>
+            <Textarea rows={4} placeholder={defaultMsg} value={customMsg} onChange={(e) => setCustomMsg(e.target.value)} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Batal</Button>
+          <Button onClick={send} disabled={sending}>
+            {sending && <Loader2 className="size-4 mr-2 animate-spin" />} Kirim Test
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
