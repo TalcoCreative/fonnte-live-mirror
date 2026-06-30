@@ -167,7 +167,7 @@ function Dashboard() {
           <OverviewTab user={user} startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} />
         </TabsContent>
         <TabsContent value="first-response" className="space-y-5">
-          <FirstResponseTab startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} />
+          <FirstResponseTab startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} frUserIds={frUserIds} division={division} />
         </TabsContent>
         <TabsContent value="performance" className="space-y-5">
           <PerformanceTab startISO={startISO} endISO={endISO} profiles={profiles} scopeIds={scopeIds} />
