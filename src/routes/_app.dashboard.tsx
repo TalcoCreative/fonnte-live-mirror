@@ -390,7 +390,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="label" fontSize={11} />
                 <YAxis fontSize={11} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="in" name="Masuk" stroke="hsl(var(--primary))" fill="url(#gIn)" strokeWidth={2} />
                 <Area type="monotone" dataKey="out" name="Keluar" stroke="#10b981" fill="url(#gOut)" strokeWidth={2} />
@@ -409,7 +409,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                     <Cell key={i} fill={s.color || "#888"} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-1 mt-2 max-h-32 overflow-auto">
@@ -445,7 +445,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
               <XAxis dataKey="label" fontSize={11} />
               <YAxis fontSize={11} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
               <Bar dataKey="count" radius={[6, 6, 0, 0]}>
                 {(data?.buckets || []).map((_: any, i: number) => <Cell key={i} fill={BUCKET_COLORS[i]} />)}
               </Bar>
@@ -463,7 +463,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis type="number" fontSize={11} />
                 <YAxis type="category" dataKey="name" fontSize={11} width={90} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Bar dataKey="avgMin" name="Menit" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -479,7 +479,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="name" fontSize={10} angle={-20} textAnchor="end" height={60} interval={0} />
                 <YAxis fontSize={11} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Bar dataKey="count" name="Jumlah" radius={[6, 6, 0, 0]}>
                   {(data?.stageDist || []).map((s: any, i: number) => (
                     <Cell key={i} fill={s.color || "hsl(var(--primary))"} />
@@ -506,7 +506,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis type="number" fontSize={11} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" fontSize={11} width={100} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {HOUR_BUCKETS.map((b, i) => (
                   <Bar key={b.label} dataKey={b.label} stackId="a" fill={BUCKET_COLORS[i]} />
@@ -532,7 +532,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis type="number" fontSize={11} />
                   <YAxis type="category" dataKey="edge" fontSize={11} width={160} />
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="avgHours" name="Avg (jam)" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
                   <Bar dataKey="count" name="Jumlah" fill="#10b981" radius={[0, 6, 6, 0]} />
@@ -578,7 +578,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                   <XAxis type="number" fontSize={11} allowDecimals={false} />
                   <YAxis type="category" dataKey="name" fontSize={11} width={100} />
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="historicalUnique" name="Historis (unik)" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]} />
                   <Bar dataKey="currentCount" name="Sedang dipegang" fill="#10b981" radius={[0, 6, 6, 0]} />
@@ -761,7 +761,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
               <XAxis dataKey="label" fontSize={11} />
               <YAxis fontSize={11} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
               <Bar dataKey="count" radius={[6, 6, 0, 0]}>
                 {data.hourBuckets.map((_: any, i: number) => <Cell key={i} fill={BUCKET_COLORS[i]} />)}
               </Bar>
@@ -787,7 +787,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                   {slaPie.map((s, i) => <Cell key={i} fill={s.fill} />)}
                 </Bar>
@@ -810,7 +810,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" fill="url(#hourGrad)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -826,7 +826,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds }: {
               <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Area type="monotone" dataKey="leads" name="Leads Baru" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.25} />
               <Area type="monotone" dataKey="responded" name="Direspon" stroke="#10b981" fill="#10b981" fillOpacity={0.25} />
@@ -954,7 +954,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="Reply" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Assign" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -980,7 +980,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis type="number" fontSize={11} allowDecimals={false} />
                 <YAxis type="category" dataKey="name" fontSize={11} width={100} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {HOUR_BUCKETS.map((b, i) => (
                   <Bar key={b.label} dataKey={b.label} stackId="a" fill={BUCKET_COLORS[i]} />
