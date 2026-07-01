@@ -391,7 +391,7 @@ async function consumeAnswer(admin: any, step: any, message: string): Promise<{ 
       }
       const idx = parseInt(msg, 10);
       if (!Number.isInteger(idx) || idx < 1 || idx > options.length) {
-        return { ok: false, error: `Mohon balas dengan angka 1 - ${options.length}.` };
+        return { ok: false, error: `Mohon pilih salah satu opsi yang tersedia.` };
       }
       const pick = options[idx - 1];
       return { ok: true, value: pick.id || pick.name };
