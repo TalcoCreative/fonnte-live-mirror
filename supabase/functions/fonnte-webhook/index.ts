@@ -97,11 +97,34 @@ Deno.serve(async (req) => {
 
     // Find/create contact based on the customer's number (not the device)
     let { data: contact } = await admin.from("contacts").select("*").eq("whatsapp_number", contactNumber).maybeSingle();
+    const isNewContact = !contact;
     if (!contact) {
+      // Skip if the number belongs to a known agent — notif WA to agent should not create an inbox thread
+      const { data: agentMatch } = await admin.from("profiles").select("id, phone").not("phone", "is", null);
+      const agentPhones = new Set((agentMatch || []).map((a: any) => normalizePhone(String(a.phone))));
+      if (agentPhones.has(contactNumber)) return json({ ok: true, skip: "agent-phone" });
+
       const { data: defaultStage } = await admin.from("stages").select("id").eq("is_default", true).maybeSingle();
+
+      // Detect ads content code from opening message
+      let contentCodeId: string | null = null;
+      let source = "organik";
+      if (!fromMe && message) {
+        const { data: codes } = await admin.from("content_codes").select("id, code").eq("is_active", true);
+        const upperMsg = message.toUpperCase();
+        for (const c of (codes || [])) {
+          if (c.code && upperMsg.includes(String(c.code).toUpperCase())) {
+            contentCodeId = c.id;
+            source = "ads";
+            break;
+          }
+        }
+      }
+
       const { data: newC } = await admin.from("contacts").insert({
         whatsapp_number: contactNumber, full_name: fromMe ? null : waName, stage_id: defaultStage?.id || null,
-        source: "whatsapp", last_interaction_at: new Date().toISOString(), total_messages: 0,
+        source, content_code_id: contentCodeId,
+        last_interaction_at: new Date().toISOString(), total_messages: 0,
       }).select().single();
       contact = newC!;
     } else if (!fromMe && !contact.full_name && waName) {
