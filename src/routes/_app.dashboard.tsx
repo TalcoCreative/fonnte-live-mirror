@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import {
   Zap, Timer, MessageCircle, AlertTriangle, Trophy, ArrowRightLeft, CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useRole } from "@/hooks/use-role";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,8 +21,17 @@ import {
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — Husada CRM" }] }),
-  component: Dashboard,
+  component: DashboardGate,
 });
+
+function DashboardGate() {
+  const { isFirstResponse, loading } = useRole();
+  const router = useRouter();
+  useEffect(() => { if (!loading && isFirstResponse) router.navigate({ to: "/inbox" }); }, [loading, isFirstResponse]);
+  if (loading) return <div className="p-8 text-center text-muted-foreground">Memuat...</div>;
+  if (isFirstResponse) return null;
+  return <Dashboard />;
+}
 
 type Profile = { id: string; full_name: string | null; email: string | null; position: string | null };
 
