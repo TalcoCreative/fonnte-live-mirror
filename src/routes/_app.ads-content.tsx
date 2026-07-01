@@ -259,27 +259,83 @@ function AdsContentPage() {
               {(() => {
                 const maxHits = Math.max(...ranked.map((r) => r.hits), 1);
                 return ranked.filter((r) => r.hits > 0).map((r, i) => (
-                  <div key={r.id} className="p-3 rounded-lg bg-accent/40 border border-border/50">
+                  <button
+                    key={r.id}
+                    onClick={() => setPreviewCodeId(r.id)}
+                    className="w-full text-left p-3 rounded-lg bg-accent/40 border border-border/50 hover:bg-accent/70 hover:border-primary/40 transition-colors cursor-pointer"
+                  >
                     <div className="flex items-center justify-between gap-3 mb-1.5">
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">{r.name}</div>
                         <div className="text-xs text-muted-foreground font-mono">{r.code}</div>
                       </div>
-                      <div className="text-2xl font-bold" style={{ color: COLORS[i % COLORS.length] }}>
-                        {r.hits}
-                        <span className="text-xs text-muted-foreground font-normal ml-1">leads</span>
+                      <div className="flex items-center gap-3">
+                        <div className="text-2xl font-bold" style={{ color: COLORS[i % COLORS.length] }}>
+                          {r.hits}
+                          <span className="text-xs text-muted-foreground font-normal ml-1">leads</span>
+                        </div>
+                        <Eye className="size-4 text-muted-foreground" />
                       </div>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
                       <div className="h-full rounded-full transition-all" style={{ width: `${(r.hits / maxHits) * 100}%`, background: COLORS[i % COLORS.length] }} />
                     </div>
-                  </div>
+                  </button>
                 ));
               })()}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewCodeId} onOpenChange={(v) => !v && setPreviewCodeId(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="size-5 text-primary" />
+              Preview Leads — {codes.find((c) => c.id === previewCodeId)?.name || "Konten"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto mt-2">
+            {(() => {
+              const code = codes.find((c) => c.id === previewCodeId);
+              const codeLeads = filteredLeads.filter((l) => l.content_code_id === previewCodeId);
+              if (!code) return null;
+              if (codeLeads.length === 0) {
+                return <div className="text-center text-sm text-muted-foreground py-8">Belum ada leads untuk konten ini.</div>;
+              }
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted text-muted-foreground sticky top-0">
+                      <tr>
+                        <th className="text-left p-2.5 font-medium">Waktu</th>
+                        <th className="text-left p-2.5 font-medium">Nama</th>
+                        <th className="text-left p-2.5 font-medium">Nomor</th>
+                        <th className="text-left p-2.5 font-medium">Produk</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {codeLeads.map((l) => {
+                        const prod = products.find((p) => p.id === l.interested_product_id);
+                        return (
+                          <tr key={l.id} className="border-t hover:bg-accent/40">
+                            <td className="p-2.5 text-xs">{new Date(l.created_at).toLocaleString("id-ID")}</td>
+                            <td className="p-2.5">{l.full_name || "—"}</td>
+                            <td className="p-2.5 font-mono text-xs">{l.whatsapp_number}</td>
+                            <td className="p-2.5 text-xs">{prod?.name || "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Tren Harian */}
       <Card className="glow-soft">
