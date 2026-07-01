@@ -53,6 +53,7 @@ function AdsContentPage() {
 
   const [from, setFrom] = useState<string>(daysAgo(30));
   const [to, setTo] = useState<string>(toDateStr(new Date()));
+  const [previewCodeId, setPreviewCodeId] = useState<string | null>(null);
 
   async function load() {
     const [c, l, p] = await Promise.all([
