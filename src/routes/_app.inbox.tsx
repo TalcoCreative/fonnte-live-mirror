@@ -141,7 +141,24 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     const ch = supabase.channel(`messages-${activeId}`)
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeId}` },
-        (payload) => setMessages((prev) => prev.find((m) => m.id === (payload.new as any).id) ? prev : [...prev, payload.new as Message]))
+        (payload) => setMessages((prev) => {
+          const incoming = payload.new as Message;
+          if (prev.find((m) => m.id === incoming.id)) return prev;
+          // Reconcile optimistic (temp id starts with "tmp-")
+          const tempIdx = prev.findIndex((m) => m.id.startsWith("tmp-") && m.content === incoming.content && m.direction === incoming.direction);
+          if (tempIdx >= 0) {
+            const copy = prev.slice();
+            copy[tempIdx] = incoming;
+            return copy;
+          }
+          return [...prev, incoming];
+        }))
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "contacts" },
+        (payload) => {
+          const c: any = payload.new;
+          setConversations((prev) => prev.map((cv) => cv.contact_id === c.id ? { ...cv, contact: { ...(cv.contact || {}), ...c } as any } : cv));
+        })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [activeId]);
@@ -208,17 +225,31 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     const textBackup = content;
     setText("");
 
+    const tempId = "tmp-" + crypto.randomUUID();
+    const optimistic: Message = {
+      id: tempId, conversation_id: activeId,
+      direction: "OUTBOUND", content, sent_at: new Date().toISOString(),
+      sent_by_id: user?.id || null, status: "SENDING",
+      type: mode === "note" ? "INTERNAL_NOTE" : "TEXT",
+      media_url: null,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+
     if (mode === "note") {
-      const { error } = await supabase.from("messages").insert({
+      const { data: inserted, error } = await supabase.from("messages").insert({
         conversation_id: activeId,
         direction: "OUTBOUND",
         type: "INTERNAL_NOTE",
         content,
         sent_by_id: user?.id || null,
         status: "SENT",
-      } as any);
+      } as any).select().single();
       setSending(false);
-      if (error) { toast.error(error.message); setText(textBackup); return; }
+      if (error) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        toast.error(error.message); setText(textBackup); return;
+      }
+      setMessages((prev) => prev.map((m) => m.id === tempId ? (inserted as any) : m));
       toast.success("Catatan internal disimpan");
       return;
     }
@@ -231,7 +262,13 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     });
     const json = await res.json();
     setSending(false);
-    if (!res.ok || !json.ok) { toast.error(json.error || "Gagal kirim"); setText(textBackup); return; }
+    if (!res.ok || !json.ok) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      toast.error(json.error || "Gagal kirim"); setText(textBackup); return;
+    }
+    if (json.message) {
+      setMessages((prev) => prev.map((m) => m.id === tempId ? (json.message as Message) : m));
+    }
     if (user) {
       await supabase.from("activity_logs").insert({
         user_id: user.id, action: "reply_message",

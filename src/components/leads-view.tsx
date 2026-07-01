@@ -93,6 +93,14 @@ export function LeadsView({ mineOnly }: { mineOnly: boolean }) {
   }
   useEffect(() => { load(); }, [mineOnly, user?.id]);
 
+  useEffect(() => {
+    const ch = supabase.channel("leads-live-" + (mineOnly ? "mine" : "all"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "contacts" }, () => load())
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "conversations" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [mineOnly, user?.id]);
+
   const filtered = contacts.filter((c) => {
     const q = search.toLowerCase();
     const matchQ = !q || c.full_name?.toLowerCase().includes(q) || c.whatsapp_number.includes(q);

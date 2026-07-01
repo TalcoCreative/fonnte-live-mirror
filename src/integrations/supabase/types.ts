@@ -163,6 +163,7 @@ export type Database = {
           chatbot_data: Json | null
           chatbot_state: string | null
           chief_complaint: string | null
+          content_code_id: string | null
           created_at: string
           current_medications: string | null
           description: string | null
@@ -189,6 +190,7 @@ export type Database = {
           chatbot_data?: Json | null
           chatbot_state?: string | null
           chief_complaint?: string | null
+          content_code_id?: string | null
           created_at?: string
           current_medications?: string | null
           description?: string | null
@@ -215,6 +217,7 @@ export type Database = {
           chatbot_data?: Json | null
           chatbot_state?: string | null
           chief_complaint?: string | null
+          content_code_id?: string | null
           created_at?: string
           current_medications?: string | null
           description?: string | null
@@ -237,6 +240,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "contacts_content_code_id_fkey"
+            columns: ["content_code_id"]
+            isOneToOne: false
+            referencedRelation: "content_codes"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "contacts_interested_product_id_fkey"
             columns: ["interested_product_id"]
             isOneToOne: false
@@ -251,6 +261,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      content_codes: {
+        Row: {
+          code: string
+          content_link: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          content_link?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          content_link?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       conversations: {
         Row: {
