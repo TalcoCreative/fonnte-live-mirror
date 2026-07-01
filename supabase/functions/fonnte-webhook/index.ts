@@ -257,6 +257,12 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
   const findIndex = (id: string | null) => id ? steps.findIndex((s: any) => s.id === id) : -1;
   let idx = findIndex(state);
 
+  // Stale state (step no longer exists in current workflow) — mark done, don't restart & spam
+  if (state && idx < 0) {
+    await admin.from("contacts").update({ chatbot_state: "done" }).eq("id", contact.id);
+    return;
+  }
+
   if (idx >= 0) {
     const cur = steps[idx];
     const result = await consumeAnswer(admin, cur, message);
