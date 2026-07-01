@@ -266,7 +266,21 @@ function AdsContentPage() {
                   >
                     <div className="flex items-center justify-between gap-3 mb-1.5">
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{r.name}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium truncate">{r.name}</div>
+                          {r.content_link && (
+                            <a
+                              href={r.content_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                              title="Buka link konten"
+                            >
+                              <ExternalLink className="size-3.5" />
+                            </a>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground font-mono">{r.code}</div>
                       </div>
                       <div className="flex items-center gap-3">
