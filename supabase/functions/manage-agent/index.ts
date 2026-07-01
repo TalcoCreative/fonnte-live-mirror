@@ -29,8 +29,8 @@ Deno.serve(async (req) => {
     if (uErr || !u.user) return j({ error: "Unauthorized" }, 401);
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-    const { data: isAdmin } = await admin.rpc("is_admin", { _user_id: u.user.id });
-    if (!isAdmin) return j({ error: "Forbidden — admin only" }, 403);
+    const { data: isSuper } = await admin.rpc("has_role", { _user_id: u.user.id, _role: "super_admin" });
+    if (!isSuper) return j({ error: "Forbidden — hanya super admin yang bisa mengelola agent" }, 403);
 
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || "");
