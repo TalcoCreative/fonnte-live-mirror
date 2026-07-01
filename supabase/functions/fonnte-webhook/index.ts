@@ -257,6 +257,12 @@ async function runWorkflow(admin: any, contact: any, message: string, convId: st
   const findIndex = (id: string | null) => id ? steps.findIndex((s: any) => s.id === id) : -1;
   let idx = findIndex(state);
 
+  // Stale state (step no longer exists in current workflow) — mark done, don't restart & spam
+  if (state && idx < 0) {
+    await admin.from("contacts").update({ chatbot_state: "done" }).eq("id", contact.id);
+    return;
+  }
+
   if (idx >= 0) {
     const cur = steps[idx];
     const result = await consumeAnswer(admin, cur, message);
@@ -404,6 +410,17 @@ async function consumeAnswer(admin: any, step: any, message: string): Promise<{ 
 async function sendReply(admin: any, contact: any, convId: string, text: string, api_key?: string, deviceNum?: string) {
   if (!text) return;
   if (!api_key) { console.warn("no api_key, skip send"); return; }
+
+  // Anti-spam: if the exact same text was already sent as the last OUTBOUND in the last 10 minutes, skip
+  const tenMinAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data: recent } = await admin.from("messages").select("id,content")
+    .eq("conversation_id", convId).eq("direction", "OUTBOUND")
+    .gte("sent_at", tenMinAgo).order("sent_at", { ascending: false }).limit(1).maybeSingle();
+  if (recent && recent.content === text) {
+    console.log("skip duplicate bot reply");
+    return;
+  }
+
   const fd = new FormData();
   fd.append("target", contact.whatsapp_number);
   fd.append("message", text);
