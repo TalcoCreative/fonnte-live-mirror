@@ -219,225 +219,248 @@ function AdsContentPage() {
         <Kpi label="Belum Terklasifikasi" value={stats.unassigned} tone="amber" />
       </div>
 
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="daily">Harian</TabsTrigger>
-          <TabsTrigger value="products">Per Produk</TabsTrigger>
-          <TabsTrigger value="codes">Daftar Kode</TabsTrigger>
-          <TabsTrigger value="log">Log Leads</TabsTrigger>
-        </TabsList>
+      {/* Semua infografis menurun (tanpa tabs) */}
 
-        <TabsContent value="overview" className="space-y-4">
-          <Card className="glow-soft">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2"><Trophy className="size-4 text-amber-500" /> Winning Content (Top 10)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {chartData.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">Belum ada leads pada rentang tanggal ini.</div>
-              ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                    <XAxis dataKey="name" style={{ fontSize: 11 }} />
-                    <YAxis allowDecimals={false} style={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--foreground))" }} />
-                    <Bar dataKey="hits" radius={[6, 6, 0, 0]}>
-                      {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+      {/* Winning Content (Top 10) */}
+      <Card className="glow-soft">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2"><Trophy className="size-4 text-amber-500" /> Winning Content (Top 10 Kode)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {chartData.length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-8">Belum ada leads pada rentang tanggal ini.</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis dataKey="name" style={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} style={{ fontSize: 11 }} />
+                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--foreground))" }} />
+                <Bar dataKey="hits" radius={[6, 6, 0, 0]}>
+                  {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
-        <TabsContent value="daily">
-          <Card className="glow-soft">
-            <CardHeader className="pb-2"><CardTitle className="text-base">Tren Harian</CardTitle></CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={daily}>
-                  <defs>
-                    <linearGradient id="gAds" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.6} />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="gOrg" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.6} />
-                      <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                  <XAxis dataKey="day" style={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} style={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--foreground))" }} />
-                  <Legend />
-                  <Area type="monotone" dataKey="ads" stroke="#10b981" fill="url(#gAds)" name="Ads" />
-                  <Area type="monotone" dataKey="organik" stroke="#0ea5e9" fill="url(#gOrg)" name="Organik" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="products">
-          <Card className="glow-soft">
-            <CardHeader className="pb-2"><CardTitle className="text-base">Distribusi Produk (dari Ads)</CardTitle></CardHeader>
-            <CardContent>
-              {productTotals.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">Belum ada leads ads pada rentang ini.</div>
-              ) : (
-                <div className="grid md:grid-cols-2 gap-4 items-center">
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie data={productTotals} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
-                        {productTotals.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--foreground))" }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="space-y-1.5">
-                    {productTotals.map((p, i) => (
-                      <div key={p.name} className="flex items-center justify-between text-sm p-2 rounded-lg bg-accent/40">
-                        <div className="flex items-center gap-2">
-                          <span className="size-3 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                          <span>{p.name}</span>
-                        </div>
-                        <span className="font-bold">{p.value}</span>
+      {/* Konten apa dapet berapa leads */}
+      <Card className="glow-soft">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2"><Megaphone className="size-4 text-primary" /> Konten & Jumlah Leads</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {ranked.filter((r) => r.hits > 0).length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-8">Belum ada konten yang menghasilkan leads pada rentang ini.</div>
+          ) : (
+            <div className="space-y-2">
+              {(() => {
+                const maxHits = Math.max(...ranked.map((r) => r.hits), 1);
+                return ranked.filter((r) => r.hits > 0).map((r, i) => (
+                  <div key={r.id} className="p-3 rounded-lg bg-accent/40 border border-border/50">
+                    <div className="flex items-center justify-between gap-3 mb-1.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">{r.name}</div>
+                        <div className="text-xs text-muted-foreground font-mono">{r.code}</div>
                       </div>
-                    ))}
+                      <div className="text-2xl font-bold" style={{ color: COLORS[i % COLORS.length] }}>
+                        {r.hits}
+                        <span className="text-xs text-muted-foreground font-normal ml-1">leads</span>
+                      </div>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${(r.hits / maxHits) * 100}%`, background: COLORS[i % COLORS.length] }} />
+                    </div>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                ));
+              })()}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        <TabsContent value="codes">
-          <Card className="glow-soft overflow-hidden">
-            <CardHeader className="pb-2"><CardTitle className="text-base">Daftar Kode Konten</CardTitle></CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted text-muted-foreground">
-                    <tr>
-                      <th className="text-left p-3 font-medium">Kode</th>
-                      <th className="text-left p-3 font-medium">Nama</th>
-                      <th className="text-left p-3 font-medium">Produk</th>
-                      <th className="text-left p-3 font-medium">Link</th>
-                      <th className="text-right p-3 font-medium">Leads</th>
-                      <th className="text-center p-3 font-medium">Status</th>
-                      <th className="p-3 w-24"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ranked.map((c) => (
-                      <tr key={c.id} className="border-t hover:bg-accent/40">
-                        <td className="p-3">
-                          <button onClick={() => { navigator.clipboard.writeText(c.code); toast.success(`Kode "${c.code}" disalin`); }}
-                            className="font-mono font-semibold text-primary hover:underline inline-flex items-center gap-1">
-                            {c.code} <Copy className="size-3 opacity-60" />
-                          </button>
-                        </td>
-                        <td className="p-3">
-                          <button className="hover:text-primary text-left" onClick={() => openEdit(c)}>{c.name}</button>
-                          {c.notes && <div className="text-xs text-muted-foreground line-clamp-1">{c.notes}</div>}
-                        </td>
-                        <td className="p-3 text-xs">
-                          {c.product_id
-                            ? <Badge variant="outline" className="border-primary/30 text-primary">{products.find((p) => p.id === c.product_id)?.name || "—"}</Badge>
-                            : <span className="text-muted-foreground">—</span>}
-                        </td>
-                        <td className="p-3">
-                          {c.content_link
-                            ? <a href={c.content_link} target="_blank" rel="noreferrer" className="text-xs text-primary inline-flex items-center gap-1 hover:underline"><ExternalLink className="size-3" /> Buka</a>
-                            : <span className="text-xs text-muted-foreground">—</span>}
-                        </td>
-                        <td className="p-3 text-right font-bold text-lg">{c.hits}</td>
-                        <td className="p-3 text-center">
-                          {c.is_active
-                            ? <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">Aktif</Badge>
-                            : <Badge variant="outline">Nonaktif</Badge>}
-                        </td>
-                        <td className="p-3 text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>Edit</Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="size-4" /></Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Hapus kode "{c.code}"?</AlertDialogTitle>
-                                  <AlertDialogDescription>Leads yang terhubung akan kehilangan referensi konten (source tetap "ads").</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Batal</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => remove(c.id)}>Hapus</AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {ranked.length === 0 && (
-                      <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Belum ada kode. Tambahkan kode pertama untuk mulai tracking.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+      {/* Tren Harian */}
+      <Card className="glow-soft">
+        <CardHeader className="pb-2"><CardTitle className="text-base">Tren Harian</CardTitle></CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={daily}>
+              <defs>
+                <linearGradient id="gAds" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.6} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="gOrg" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.6} />
+                  <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+              <XAxis dataKey="day" style={{ fontSize: 11 }} />
+              <YAxis allowDecimals={false} style={{ fontSize: 11 }} />
+              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--foreground))" }} />
+              <Legend />
+              <Area type="monotone" dataKey="ads" stroke="#10b981" fill="url(#gAds)" name="Ads" />
+              <Area type="monotone" dataKey="organik" stroke="#0ea5e9" fill="url(#gOrg)" name="Organik" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
-        <TabsContent value="log">
-          <Card className="glow-soft overflow-hidden">
-            <CardHeader className="pb-2"><CardTitle className="text-base">Log Leads Masuk ({leadLog.length})</CardTitle></CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto max-h-[500px]">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted text-muted-foreground sticky top-0">
-                    <tr>
-                      <th className="text-left p-2.5 font-medium">Waktu</th>
-                      <th className="text-left p-2.5 font-medium">Nama</th>
-                      <th className="text-left p-2.5 font-medium">Nomor</th>
-                      <th className="text-left p-2.5 font-medium">Sumber</th>
-                      <th className="text-left p-2.5 font-medium">Kode</th>
-                      <th className="text-left p-2.5 font-medium">Produk</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leadLog.map((l) => {
-                      const code = codes.find((c) => c.id === l.content_code_id);
-                      const prod = products.find((p) => p.id === l.interested_product_id);
-                      return (
-                        <tr key={l.id} className="border-t hover:bg-accent/40">
-                          <td className="p-2.5 text-xs">{new Date(l.created_at).toLocaleString("id-ID")}</td>
-                          <td className="p-2.5">{l.full_name || "—"}</td>
-                          <td className="p-2.5 font-mono text-xs">{l.whatsapp_number}</td>
-                          <td className="p-2.5">
-                            {l.content_code_id
-                              ? <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">Ads</Badge>
-                              : (l.source === "organik" ? <Badge variant="outline">Organik</Badge> : <Badge variant="secondary">—</Badge>)}
-                          </td>
-                          <td className="p-2.5 font-mono text-xs">{code?.code || "—"}</td>
-                          <td className="p-2.5 text-xs">{prod?.name || "—"}</td>
-                        </tr>
-                      );
-                    })}
-                    {leadLog.length === 0 && (
-                      <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Tidak ada leads pada rentang ini.</td></tr>
-                    )}
-                  </tbody>
-                </table>
+      {/* Distribusi Produk */}
+      <Card className="glow-soft">
+        <CardHeader className="pb-2"><CardTitle className="text-base">Distribusi Produk (dari Ads)</CardTitle></CardHeader>
+        <CardContent>
+          {productTotals.length === 0 ? (
+            <div className="text-center text-sm text-muted-foreground py-8">Belum ada leads ads pada rentang ini.</div>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4 items-center">
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie data={productTotals} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={2}>
+                    {productTotals.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12, color: "hsl(var(--foreground))" }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-1.5">
+                {productTotals.map((p, i) => (
+                  <div key={p.name} className="flex items-center justify-between text-sm p-2 rounded-lg bg-accent/40">
+                    <div className="flex items-center gap-2">
+                      <span className="size-3 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                      <span>{p.name}</span>
+                    </div>
+                    <span className="font-bold">{p.value}</span>
+                  </div>
+                ))}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Daftar Kode */}
+      <Card className="glow-soft overflow-hidden">
+        <CardHeader className="pb-2"><CardTitle className="text-base">Daftar Kode Konten</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-muted-foreground">
+                <tr>
+                  <th className="text-left p-3 font-medium">Kode</th>
+                  <th className="text-left p-3 font-medium">Nama</th>
+                  <th className="text-left p-3 font-medium">Produk</th>
+                  <th className="text-left p-3 font-medium">Link</th>
+                  <th className="text-right p-3 font-medium">Leads</th>
+                  <th className="text-center p-3 font-medium">Status</th>
+                  <th className="p-3 w-24"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranked.map((c) => (
+                  <tr key={c.id} className="border-t hover:bg-accent/40">
+                    <td className="p-3">
+                      <button onClick={() => { navigator.clipboard.writeText(c.code); toast.success(`Kode "${c.code}" disalin`); }}
+                        className="font-mono font-semibold text-primary hover:underline inline-flex items-center gap-1">
+                        {c.code} <Copy className="size-3 opacity-60" />
+                      </button>
+                    </td>
+                    <td className="p-3">
+                      <button className="hover:text-primary text-left" onClick={() => openEdit(c)}>{c.name}</button>
+                      {c.notes && <div className="text-xs text-muted-foreground line-clamp-1">{c.notes}</div>}
+                    </td>
+                    <td className="p-3 text-xs">
+                      {c.product_id
+                        ? <Badge variant="outline" className="border-primary/30 text-primary">{products.find((p) => p.id === c.product_id)?.name || "—"}</Badge>
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="p-3">
+                      {c.content_link
+                        ? <a href={c.content_link} target="_blank" rel="noreferrer" className="text-xs text-primary inline-flex items-center gap-1 hover:underline"><ExternalLink className="size-3" /> Buka</a>
+                        : <span className="text-xs text-muted-foreground">—</span>}
+                    </td>
+                    <td className="p-3 text-right font-bold text-lg">{c.hits}</td>
+                    <td className="p-3 text-center">
+                      {c.is_active
+                        ? <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">Aktif</Badge>
+                        : <Badge variant="outline">Nonaktif</Badge>}
+                    </td>
+                    <td className="p-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>Edit</Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="ghost" className="text-destructive"><Trash2 className="size-4" /></Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Hapus kode "{c.code}"?</AlertDialogTitle>
+                              <AlertDialogDescription>Leads yang terhubung akan kehilangan referensi konten (source tetap "ads").</AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Batal</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => remove(c.id)}>Hapus</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {ranked.length === 0 && (
+                  <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">Belum ada kode. Tambahkan kode pertama untuk mulai tracking.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Log Leads */}
+      <Card className="glow-soft overflow-hidden">
+        <CardHeader className="pb-2"><CardTitle className="text-base">Log Leads Masuk ({leadLog.length})</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto max-h-[500px]">
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-muted-foreground sticky top-0">
+                <tr>
+                  <th className="text-left p-2.5 font-medium">Waktu</th>
+                  <th className="text-left p-2.5 font-medium">Nama</th>
+                  <th className="text-left p-2.5 font-medium">Nomor</th>
+                  <th className="text-left p-2.5 font-medium">Sumber</th>
+                  <th className="text-left p-2.5 font-medium">Kode</th>
+                  <th className="text-left p-2.5 font-medium">Produk</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leadLog.map((l) => {
+                  const code = codes.find((c) => c.id === l.content_code_id);
+                  const prod = products.find((p) => p.id === l.interested_product_id);
+                  return (
+                    <tr key={l.id} className="border-t hover:bg-accent/40">
+                      <td className="p-2.5 text-xs">{new Date(l.created_at).toLocaleString("id-ID")}</td>
+                      <td className="p-2.5">{l.full_name || "—"}</td>
+                      <td className="p-2.5 font-mono text-xs">{l.whatsapp_number}</td>
+                      <td className="p-2.5">
+                        {l.content_code_id
+                          ? <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">Ads</Badge>
+                          : (l.source === "organik" ? <Badge variant="outline">Organik</Badge> : <Badge variant="secondary">—</Badge>)}
+                      </td>
+                      <td className="p-2.5 font-mono text-xs">{code?.code || "—"}</td>
+                      <td className="p-2.5 text-xs">{prod?.name || "—"}</td>
+                    </tr>
+                  );
+                })}
+                {leadLog.length === 0 && (
+                  <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">Tidak ada leads pada rentang ini.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
 
       <Dialog open={openNew} onOpenChange={setOpenNew}>
         <DialogContent>
