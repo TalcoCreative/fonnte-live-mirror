@@ -141,7 +141,24 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     const ch = supabase.channel(`messages-${activeId}`)
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${activeId}` },
-        (payload) => setMessages((prev) => prev.find((m) => m.id === (payload.new as any).id) ? prev : [...prev, payload.new as Message]))
+        (payload) => setMessages((prev) => {
+          const incoming = payload.new as Message;
+          if (prev.find((m) => m.id === incoming.id)) return prev;
+          // Reconcile optimistic (temp id starts with "tmp-")
+          const tempIdx = prev.findIndex((m) => m.id.startsWith("tmp-") && m.content === incoming.content && m.direction === incoming.direction);
+          if (tempIdx >= 0) {
+            const copy = prev.slice();
+            copy[tempIdx] = incoming;
+            return copy;
+          }
+          return [...prev, incoming];
+        }))
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "contacts" },
+        (payload) => {
+          const c: any = payload.new;
+          setConversations((prev) => prev.map((cv) => cv.contact_id === c.id ? { ...cv, contact: { ...(cv.contact || {}), ...c } as any } : cv));
+        })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [activeId]);
