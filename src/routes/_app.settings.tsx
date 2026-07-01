@@ -467,6 +467,7 @@ function TeamTab() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [me, setMe] = useState<string | null>(null);
+  const [isSuper, setIsSuper] = useState(false);
 
   // Add-agent form
   const [fullName, setFullName] = useState("");
@@ -486,6 +487,7 @@ function TeamTab() {
     setMe(u.user?.id || null);
     const roleMap: Record<string, string[]> = {};
     (roles || []).forEach((r: any) => { roleMap[r.user_id] = [...(roleMap[r.user_id] || []), r.role]; });
+    setIsSuper((roleMap[u.user?.id || ""] || []).includes("super_admin"));
     setRows((profiles || []).map((p: any) => ({ ...p, roles: roleMap[p.id] || [] })));
     setLoading(false);
   }
@@ -539,11 +541,18 @@ function TeamTab() {
     finally { setBusy(false); }
   }
 
-  async function savePosition(id: string, value: string) {
-    try {
-      await callManageAgent({ action: "update", user_id: id, position: value });
-      toast.success("Jabatan diperbarui");
-    } catch (e: any) { toast.error(e.message); }
+  if (!loading && !isSuper) {
+    return (
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Tim Agent</CardTitle>
+          <CardDescription>Hanya Super Admin yang dapat menambah, mengubah, atau menghapus agent.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-sm text-muted-foreground">Anda tidak memiliki akses ke pengelolaan tim.</div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -599,7 +608,7 @@ function TeamTab() {
       <Card>
         <CardHeader>
           <CardTitle>Tim Agent ({rows.length})</CardTitle>
-          <CardDescription>Semua agent dapat melihat & membalas chat di Inbox secara real-time.</CardDescription>
+          <CardDescription>Edit nama, jabatan, dan nomor WhatsApp — klik <b>Simpan</b> untuk menyimpan perubahan.</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -607,49 +616,14 @@ function TeamTab() {
           ) : (
             <div className="border rounded-md divide-y">
               {rows.map((r) => (
-                <div key={r.id} className="p-3 flex items-center justify-between gap-3 flex-wrap">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium text-sm flex items-center gap-2 flex-wrap">
-                      {r.full_name || r.email}
-                      {r.id === me && <Badge variant="outline" className="text-[10px]">Anda</Badge>}
-                      {r.roles.map((role: string) => (
-                        <Badge key={role} variant={role.includes("admin") ? "default" : "secondary"} className="text-[10px]">
-                          {role}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="text-xs text-muted-foreground">{r.email}{r.phone ? ` · ${r.phone}` : ""}</div>
-                  </div>
-                  <Input
-                    defaultValue={r.position || ""}
-                    placeholder="Jabatan..."
-                    className="h-9 text-xs w-full md:w-44"
-                    onBlur={(e) => {
-                      if (e.target.value !== (r.position || "")) savePosition(r.id, e.target.value);
-                    }}
-                  />
-                  <Input
-                    defaultValue={r.phone || ""}
-                    placeholder="62..."
-                    className="h-9 text-xs w-full md:w-40"
-                    onBlur={async (e) => {
-                      const v = e.target.value.trim();
-                      if (v !== (r.phone || "")) {
-                        try { await callManageAgent({ action: "update", user_id: r.id, phone: v }); toast.success("Nomor diperbarui"); load(); }
-                        catch (err: any) { toast.error(err.message); }
-                      }
-                    }}
-                  />
-                  <TestNotifyButton agent={r} />
-                  <Button
-                    size="sm" variant="ghost"
-                    className="text-destructive hover:bg-destructive/10"
-                    disabled={busy || r.id === me}
-                    onClick={() => deleteAgent(r.id, r.full_name || r.email)}
-                  >
-                    Hapus
-                  </Button>
-                </div>
+                <AgentRow key={r.id} r={r} me={me} busy={busy}
+                  onSave={async (patch) => {
+                    await callManageAgent({ action: "update", user_id: r.id, ...patch });
+                    toast.success("Perubahan disimpan");
+                    load();
+                  }}
+                  onDelete={() => deleteAgent(r.id, r.full_name || r.email)}
+                />
               ))}
               {!rows.length && <p className="p-3 text-sm text-muted-foreground">Belum ada anggota tim.</p>}
             </div>
@@ -659,6 +633,66 @@ function TeamTab() {
     </div>
   );
 }
+
+function AgentRow({ r, me, busy, onSave, onDelete }: { r: any; me: string | null; busy: boolean; onSave: (patch: any) => Promise<void>; onDelete: () => void }) {
+  const [fullName, setFullName] = useState(r.full_name || "");
+  const [position, setPosition] = useState(r.position || "");
+  const [phone, setPhone] = useState(r.phone || "");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setFullName(r.full_name || ""); setPosition(r.position || ""); setPhone(r.phone || ""); }, [r.id, r.full_name, r.position, r.phone]);
+  const dirty = fullName !== (r.full_name || "") || position !== (r.position || "") || phone !== (r.phone || "");
+
+  async function save() {
+    setSaving(true);
+    try {
+      const patch: any = {};
+      if (fullName !== (r.full_name || "")) patch.full_name = fullName;
+      if (position !== (r.position || "")) patch.position = position;
+      if (phone !== (r.phone || "")) patch.phone = phone;
+      await onSave(patch);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div className="p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-xs text-muted-foreground min-w-0 flex-1">
+          <span className="font-mono">{r.email}</span>
+          {r.id === me && <Badge variant="outline" className="ml-2 text-[10px]">Anda</Badge>}
+          {r.roles.map((role: string) => (
+            <Badge key={role} variant={role.includes("admin") ? "default" : "secondary"} className="ml-1 text-[10px]">{role}</Badge>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <TestNotifyButton agent={{ ...r, full_name: fullName, phone }} />
+          <Button size="sm" onClick={save} disabled={!dirty || saving}>
+            {saving && <Loader2 className="size-3.5 mr-1 animate-spin" />} Simpan
+          </Button>
+          <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10"
+            disabled={busy || r.id === me} onClick={onDelete}>
+            Hapus
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Nama</Label>
+          <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nama lengkap" className="h-9 text-sm" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Jabatan</Label>
+          <Input value={position} onChange={(e) => setPosition(e.target.value)} placeholder="cth: Dokter" className="h-9 text-sm" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">No. WhatsApp</Label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="628..." className="h-9 text-sm" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 type Shift = { id: string; name: string; start_time: string; end_time: string; days_of_week: number[] | null; is_active: boolean };
 const DAY_LABELS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
