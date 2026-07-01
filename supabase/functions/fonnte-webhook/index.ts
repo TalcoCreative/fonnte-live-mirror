@@ -108,13 +108,15 @@ Deno.serve(async (req) => {
 
       // Detect ads content code from opening message
       let contentCodeId: string | null = null;
+      let contentProductId: string | null = null;
       let source = "organik";
       if (!fromMe && message) {
-        const { data: codes } = await admin.from("content_codes").select("id, code").eq("is_active", true);
+        const { data: codes } = await admin.from("content_codes").select("id, code, product_id").eq("is_active", true);
         const upperMsg = message.toUpperCase();
         for (const c of (codes || [])) {
           if (c.code && upperMsg.includes(String(c.code).toUpperCase())) {
             contentCodeId = c.id;
+            contentProductId = (c as any).product_id || null;
             source = "ads";
             break;
           }
@@ -124,9 +126,11 @@ Deno.serve(async (req) => {
       const { data: newC } = await admin.from("contacts").insert({
         whatsapp_number: contactNumber, full_name: fromMe ? null : waName, stage_id: defaultStage?.id || null,
         source, content_code_id: contentCodeId,
+        interested_product_id: contentProductId,
         last_interaction_at: new Date().toISOString(), total_messages: 0,
       }).select().single();
       contact = newC!;
+
     } else if (!fromMe && !contact.full_name && waName) {
       await admin.from("contacts").update({ full_name: waName }).eq("id", contact.id);
       contact.full_name = waName;
