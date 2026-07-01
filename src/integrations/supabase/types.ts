@@ -271,6 +271,7 @@ export type Database = {
           is_active: boolean
           name: string
           notes: string | null
+          product_id: string | null
           updated_at: string
         }
         Insert: {
@@ -281,6 +282,7 @@ export type Database = {
           is_active?: boolean
           name: string
           notes?: string | null
+          product_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -291,9 +293,18 @@ export type Database = {
           is_active?: boolean
           name?: string
           notes?: string | null
+          product_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "content_codes_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conversations: {
         Row: {
