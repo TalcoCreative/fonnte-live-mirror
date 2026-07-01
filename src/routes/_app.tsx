@@ -48,6 +48,25 @@ function AppLayout() {
     }
   }, [user]);
 
+  // Global online heartbeat — jalan di semua halaman selama user login.
+  useEffect(() => {
+    if (!user) return;
+    const beat = () => {
+      supabase.from("profiles").update({ last_seen_at: new Date().toISOString() }).eq("id", user.id).then(() => {});
+    };
+    beat();
+    const interval = setInterval(beat, 45_000);
+    const onVis = () => { if (document.visibilityState === "visible") beat(); };
+    const onFocus = () => beat();
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [user]);
+
   // Close mobile menu on route change
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
