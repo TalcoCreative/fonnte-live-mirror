@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  LayoutDashboard, MessageSquare, Users, Settings, LogOut, Send, Inbox, UserCircle2, Activity,
+  LayoutDashboard, MessageSquare, Users, Settings, LogOut, Send, Inbox, UserCircle2, Activity, Megaphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import husadaLogo from "@/assets/husada-logo-v2.png.asset.json";
@@ -16,12 +16,14 @@ export const Route = createFileRoute("/_app")({
 
 type NavItem = { to: string; label: string; icon: any; crucial: boolean; roles?: AppRole[] };
 const ALL_NAV: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, crucial: false, roles: ["super_admin", "admin", "agent", "first_response"] },
+  // Dashboard tidak untuk First Response — mereka fokus di Inbox saja.
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, crucial: false, roles: ["super_admin", "admin", "agent"] },
   { to: "/inbox", label: "Inbox", icon: MessageSquare, crucial: true },
   { to: "/my-inbox", label: "My Inbox", icon: Inbox, crucial: false },
   { to: "/leads", label: "Leads", icon: Users, crucial: true, roles: ["super_admin", "admin", "agent"] },
   { to: "/my-leads", label: "My Leads", icon: UserCircle2, crucial: false, roles: ["super_admin", "admin", "agent"] },
   { to: "/broadcast", label: "Broadcast", icon: Send, crucial: false, roles: ["super_admin", "admin", "agent"] },
+  { to: "/ads-content", label: "Ads Content", icon: Megaphone, crucial: false, roles: ["super_admin", "admin"] },
   { to: "/activity", label: "Log", icon: Activity, crucial: false, roles: ["super_admin", "admin"] },
   { to: "/settings", label: "Settings", icon: Settings, crucial: false, roles: ["super_admin", "admin"] },
 ];
