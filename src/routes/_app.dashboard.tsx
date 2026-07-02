@@ -1093,6 +1093,8 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                     <th className="py-2 pr-3 text-right">Total Respon</th>
                     <th className="py-2 pr-3 text-right">Avg Resp.</th>
                     <th className="py-2 pr-3 text-right">Avg Handle</th>
+                    <th className="py-2 pr-3 text-right">Hari Aktif</th>
+                    <th className="py-2 pr-3 text-right">Avg Jam Kerja/Hari</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1114,6 +1116,8 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                       <td className="py-2 pr-3 text-right font-mono">{a.responses}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.avgRespSec ? fmtTime(a.avgRespSec) : "-"}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.avgHandleSec ? fmtTime(a.avgHandleSec) : "-"}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.daysActive}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.avgWorkHours > 0 ? `${a.avgWorkHours.toFixed(2)} j` : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1122,9 +1126,81 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           )}
         </CardContent>
       </Card>
+
+      {/* Rincian Jam Kerja Harian per Agent */}
+      <Card className="glow-soft">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Clock className="size-4" /> Rincian Jam Kerja Harian
+          </CardTitle>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Dihitung dari log aktivitas (chat, ganti stage, assign). Jam kerja = selisih aktivitas pertama dan terakhir di hari tersebut.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(!data.frAgents || data.frAgents.length === 0) ? (
+            <div className="text-sm text-muted-foreground text-center py-6">Tidak ada data aktivitas pada rentang ini.</div>
+          ) : (
+            data.frAgents.map((a: any) => (
+              <details key={a.id} className="border rounded-lg" open={data.frAgents.length <= 3}>
+                <summary className="cursor-pointer px-3 py-2 flex flex-wrap items-center justify-between gap-2 hover:bg-accent/30 rounded-lg">
+                  <span className="font-medium text-sm">{a.name}</span>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {a.daysActive} hari · Avg {a.avgWorkHours.toFixed(2)} j/hari
+                  </span>
+                </summary>
+                {a.dailyWork.length === 0 ? (
+                  <div className="p-3 text-xs text-muted-foreground">Tidak ada aktivitas.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-[10px] text-muted-foreground border-b border-t bg-muted/30">
+                          <th className="py-1.5 px-3">Tanggal</th>
+                          <th className="py-1.5 px-3">Mulai</th>
+                          <th className="py-1.5 px-3">Selesai</th>
+                          <th className="py-1.5 px-3 text-right">Jam Kerja</th>
+                          <th className="py-1.5 px-3 text-right">Aktivitas</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {a.dailyWork.map((d: any) => {
+                          const start = new Date(d.startMs);
+                          const end = new Date(d.endMs);
+                          const dayName = start.toLocaleDateString("id-ID", { weekday: "long", day: "2-digit", month: "short", year: "numeric" });
+                          const timeFmt = (dt: Date) => dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+                          return (
+                            <tr key={d.date} className="border-b last:border-0 hover:bg-accent/20">
+                              <td className="py-1.5 px-3">{dayName}</td>
+                              <td className="py-1.5 px-3 font-mono">{timeFmt(start)}</td>
+                              <td className="py-1.5 px-3 font-mono">{timeFmt(end)}</td>
+                              <td className="py-1.5 px-3 text-right font-mono">{d.hours.toFixed(2)} j</td>
+                              <td className="py-1.5 px-3 text-right font-mono">{d.activities}</td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-muted/40 font-medium">
+                          <td className="py-1.5 px-3" colSpan={3}>Total</td>
+                          <td className="py-1.5 px-3 text-right font-mono">
+                            {a.dailyWork.reduce((s: number, d: any) => s + d.hours, 0).toFixed(2)} j
+                          </td>
+                          <td className="py-1.5 px-3 text-right font-mono">
+                            {a.dailyWork.reduce((s: number, d: any) => s + d.activities, 0)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </details>
+            ))
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }
+
 
 /* ============================== PERFORMANCE ============================== */
 
