@@ -949,13 +949,14 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
       const trend = Object.values(days);
 
       setData({
-        newLeads, totalResp, avgSec, unresponded, slaCount,
+        newLeads, totalResp, avgSec, avgFirstRespSec, unresponded, slaCount,
         leaderboard, hourlyData, trend, hourBuckets,
         frAgents,
         totalFirst, totalContinue, totalClosing, totalShare, avgHandle,
         hanging, avgLeadsPerFR,
         slaPct: totalResp ? Math.round((slaCount.green / totalResp) * 100) : 0,
       });
+
     })();
   }, [startISO, endISO, slaGreen, slaYellow, profiles, scopeIds, effectiveScope, frUserIds]);
 
