@@ -703,60 +703,90 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
       const evs = (events || []) as any[];
       const newLeads = evs.filter((e) => e.event_type === "contact_created").length;
 
-      const inboundFirst: Record<string, number> = {};
-      const responses: { contact_id: string; actor_id: string | null; seconds: number; at: string }[] = [];
+      // Per-contact cycle state
+      const cycleFirstInboundTs: Record<string, number> = {}; // first inbound of the current cycle
+      const pendingInboundTs: Record<string, number> = {};    // most recent unreplied inbound (for per-bubble avg)
       const firstResponderByContact: Record<string, string> = {};
-      // Track ownership history (ordered unique FR owners per contact)
       const ownerHistory: Record<string, string[]> = {};
       const firstHandleAt: Record<string, number> = {};
 
+      // Per-bubble response records (each inbound answered → 1 record)
+      const responses: { contact_id: string; actor_id: string | null; seconds: number; at: string }[] = [];
+      // First-response records (per-cycle → 1 record)
+      const firstResponses: { contact_id: string; actor_id: string; seconds: number; at: string }[] = [];
+
       type FRStat = {
         id: string; name: string;
-        firstChats: number; continuedFromOther: number; responses: number;
-        totalSec: number; closings: number; closingShare: number; closingLogs: any[]; shareLogs: any[];
+        firstChats: number; continuedFromOther: number;
+        responses: number;              // total outbound bubbles by this agent (any)
+        respAnsweredCount: number;      // bubbles where an inbound was pending (per-bubble avg divisor)
+        respAnsweredTotalSec: number;   // sum of (out - lastInbound) for those bubbles
+        firstRespCount: number;         // cycles where this agent was first responder
+        firstRespTotalSec: number;      // sum of (firstOut - cycleFirstInbound)
+        totalSec: number;               // legacy — kept for compatibility
+        closings: number; closingShare: number; closingLogs: any[]; shareLogs: any[];
         totalHandleSec: number; handleCount: number;
       };
       const fr: Record<string, FRStat> = {};
       const ensureFR = (id: string) => fr[id] = fr[id] || {
         id, name: nameById[id] || "Agent",
-        firstChats: 0, continuedFromOther: 0, responses: 0, totalSec: 0,
+        firstChats: 0, continuedFromOther: 0,
+        responses: 0, respAnsweredCount: 0, respAnsweredTotalSec: 0,
+        firstRespCount: 0, firstRespTotalSec: 0, totalSec: 0,
         closings: 0, closingShare: 0, closingLogs: [], shareLogs: [],
         totalHandleSec: 0, handleCount: 0,
       };
 
       for (const e of evs) {
-        if (e.event_type === "chat_in" && !inboundFirst[e.contact_id]) {
-          inboundFirst[e.contact_id] = new Date(e.occurred_at).getTime();
-        } else if (e.event_type === "chat_out" && e.actor_id && frUserIds.has(e.actor_id)) {
-          const s = ensureFR(e.actor_id);
-          s.responses++;
-          // Track owner history (unique, ordered)
-          const hist = ownerHistory[e.contact_id] = ownerHistory[e.contact_id] || [];
-          if (hist[hist.length - 1] !== e.actor_id) hist.push(e.actor_id);
-          if (firstResponderByContact[e.contact_id]) {
-            if (firstResponderByContact[e.contact_id] !== e.actor_id) s.continuedFromOther++;
-          } else {
+        const t = new Date(e.occurred_at).getTime();
+        if (e.event_type === "chat_in") {
+          if (!cycleFirstInboundTs[e.contact_id]) cycleFirstInboundTs[e.contact_id] = t;
+          pendingInboundTs[e.contact_id] = t; // always update to latest unreplied
+        } else if (e.event_type === "chat_out" && e.actor_id) {
+          const isFRAgent = frUserIds.has(e.actor_id);
+          const inScope = !effectiveScope || effectiveScope.has(e.actor_id);
+
+          // --- First response (per cycle) ---
+          if (isFRAgent && !firstResponderByContact[e.contact_id]) {
+            const s = ensureFR(e.actor_id);
             firstResponderByContact[e.contact_id] = e.actor_id;
             s.firstChats++;
-            firstHandleAt[e.contact_id] = new Date(e.occurred_at).getTime();
-          }
-          if (inboundFirst[e.contact_id]) {
-            const seconds = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - inboundFirst[e.contact_id]) / 1000));
-            s.totalSec += seconds;
-            if (!effectiveScope || effectiveScope.has(e.actor_id)) {
-              responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
+            firstHandleAt[e.contact_id] = t;
+            if (cycleFirstInboundTs[e.contact_id]) {
+              const frSec = Math.max(0, Math.round((t - cycleFirstInboundTs[e.contact_id]) / 1000));
+              s.firstRespTotalSec += frSec;
+              s.firstRespCount++;
+              if (inScope) firstResponses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds: frSec, at: e.occurred_at });
             }
-            delete inboundFirst[e.contact_id];
+          } else if (isFRAgent && firstResponderByContact[e.contact_id] !== e.actor_id) {
+            const s = ensureFR(e.actor_id);
+            const hist = ownerHistory[e.contact_id] = ownerHistory[e.contact_id] || [];
+            if (!hist.includes(e.actor_id)) s.continuedFromOther++;
           }
-        } else if (e.event_type === "chat_out" && inboundFirst[e.contact_id] && e.actor_id) {
-          if (effectiveScope && !effectiveScope.has(e.actor_id)) { delete inboundFirst[e.contact_id]; continue; }
-          const seconds = Math.max(0, Math.round((new Date(e.occurred_at).getTime() - inboundFirst[e.contact_id]) / 1000));
-          responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
-          delete inboundFirst[e.contact_id];
+
+          // Owner history (unique, ordered) — include the first responder too
+          const hist = ownerHistory[e.contact_id] = ownerHistory[e.contact_id] || [];
+          if (isFRAgent && hist[hist.length - 1] !== e.actor_id) hist.push(e.actor_id);
+
+          // --- Per-bubble response ---
+          if (isFRAgent) {
+            const s = ensureFR(e.actor_id);
+            s.responses++;
+            if (pendingInboundTs[e.contact_id]) {
+              const seconds = Math.max(0, Math.round((t - pendingInboundTs[e.contact_id]) / 1000));
+              s.respAnsweredCount++;
+              s.respAnsweredTotalSec += seconds;
+              s.totalSec += seconds;
+              if (inScope) responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
+              delete pendingInboundTs[e.contact_id];
+            }
+          } else {
+            // Non-FR outbound (e.g. bot) still consumes the pending inbound so it isn't over-credited later
+            if (pendingInboundTs[e.contact_id]) delete pendingInboundTs[e.contact_id];
+          }
         } else if (e.event_type === "stage_changed" && e.actor_id && frUserIds.has(e.actor_id)) {
           const newStageId = e.new_value?.stage_id;
           const oldStageId = e.old_value?.stage_id;
-          // Closing: stage moves from FR stage to non-FR stage
           if (newStageId && !frStageIds.has(newStageId) && (!oldStageId || frStageIds.has(oldStageId) || ownerHistory[e.contact_id])) {
             const closer = ensureFR(e.actor_id);
             closer.closings++;
@@ -765,7 +795,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
             const share = contributors.length ? 1 / contributors.length : 0;
             const contact = contactById[e.contact_id] || {};
             const handleSec = firstHandleAt[e.contact_id]
-              ? Math.round((new Date(e.occurred_at).getTime() - firstHandleAt[e.contact_id]) / 1000) : 0;
+              ? Math.round((t - firstHandleAt[e.contact_id]) / 1000) : 0;
             if (handleSec > 0) { closer.totalHandleSec += handleSec; closer.handleCount++; }
             const closingLog = {
               contact_id: e.contact_id,
@@ -776,7 +806,6 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
               contributors: contributors.map((id) => nameById[id] || id),
             };
             closer.closingLogs.push(closingLog);
-            // Closing share for each contributor
             for (const cid of contributors) {
               const c = ensureFR(cid);
               c.closingShare += share;
@@ -790,17 +819,23 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                 at: e.occurred_at,
               });
             }
-            // Reset ownership cycle so subsequent re-opens count separately
+            // Reset cycle
             delete ownerHistory[e.contact_id];
             delete firstResponderByContact[e.contact_id];
             delete firstHandleAt[e.contact_id];
+            delete cycleFirstInboundTs[e.contact_id];
+            delete pendingInboundTs[e.contact_id];
           }
         }
       }
 
       const totalResp = responses.length;
       const avgSec = totalResp ? Math.round(responses.reduce((s, r) => s + r.seconds, 0) / totalResp) : 0;
-      const unresponded = Object.keys(inboundFirst).length;
+      const avgFirstRespSec = firstResponses.length
+        ? Math.round(firstResponses.reduce((s, r) => s + r.seconds, 0) / firstResponses.length)
+        : 0;
+      const unresponded = Object.keys(pendingInboundTs).length;
+
 
       const greenS = slaGreen * 60;
       const yellowS = slaYellow * 60;
