@@ -1155,8 +1155,10 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                         <Badge className="bg-fuchsia-500/15 text-fuchsia-500 font-mono">{a.closingShare.toFixed(2)}</Badge>
                       </td>
                       <td className="py-2 pr-3 text-right font-mono">{a.responses}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.avgFirstRespSec ? fmtTime(a.avgFirstRespSec) : "-"}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.avgRespSec ? fmtTime(a.avgRespSec) : "-"}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.avgHandleSec ? fmtTime(a.avgHandleSec) : "-"}</td>
+
                       <td className="py-2 pr-3 text-right font-mono">{a.daysActive}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.avgWorkHours > 0 ? `${a.avgWorkHours.toFixed(2)} j` : "-"}</td>
                     </tr>
