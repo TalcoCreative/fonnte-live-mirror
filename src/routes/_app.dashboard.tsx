@@ -1130,11 +1130,13 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                     <th className="py-2 pr-3 text-right">Closing</th>
                     <th className="py-2 pr-3 text-right">Closing Share</th>
                     <th className="py-2 pr-3 text-right">Total Respon</th>
+                    <th className="py-2 pr-3 text-right">Avg First Resp.</th>
                     <th className="py-2 pr-3 text-right">Avg Resp.</th>
                     <th className="py-2 pr-3 text-right">Avg Handle</th>
                     <th className="py-2 pr-3 text-right">Hari Aktif</th>
                     <th className="py-2 pr-3 text-right">Avg Jam Kerja/Hari</th>
                   </tr>
+
                 </thead>
                 <tbody>
                   {data.frAgents.map((a: any) => (
