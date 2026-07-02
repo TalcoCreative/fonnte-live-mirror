@@ -1287,7 +1287,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
           perAgent[id] = {
             id, name: p?.full_name || p?.email || "Tidak dikenal",
             division: p?.position || "—",
-            outbound: 0, assigned: 0, stageChanges: 0, won: 0, avgResp: 0, respCount: 0,
+            outbound: 0, won: 0, avgResp: 0, respCount: 0,
             buckets: HOUR_BUCKETS.map(() => 0),
           };
         }
@@ -1299,9 +1299,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
         if (scopeIds && !scopeIds.has(e.actor_id)) return;
         const a = ensure(e.actor_id);
         if (e.event_type === "chat_out") a.outbound++;
-        else if (["assigned", "reassigned", "conv_assigned", "conv_takeover"].includes(e.event_type)) a.assigned++;
         else if (e.event_type === "stage_changed") {
-          a.stageChanges++;
           const newId = e.new_value?.stage_id;
           if (newId && wonStageIds.has(newId)) a.won++;
         }
@@ -1321,7 +1319,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
   }, [startISO, endISO, profiles, scopeIds]);
 
   const fmtTime = (s: number) => !s ? "-" : s < 60 ? `${s}d` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}j ${Math.floor((s % 3600) / 60)}m`;
-  const chartData = rows.slice(0, 10).map((r) => ({ name: r.name.split(" ")[0], Reply: r.outbound, Assign: r.assigned, Stage: r.stageChanges, Won: r.won }));
+  const chartData = rows.slice(0, 10).map((r) => ({ name: r.name.split(" ")[0], Reply: r.outbound, Won: r.won }));
 
   return (
     <>
@@ -1339,8 +1337,6 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="Reply" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Assign" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Stage" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Won" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -1381,24 +1377,20 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
               <tr>
                 <th className="text-left py-2 px-2">Agent</th>
                 <th className="text-left py-2 px-2">Divisi</th>
-                <th className="text-right py-2 px-2"><MessageSquare className="size-3 inline" /> Reply</th>
-                <th className="text-right py-2 px-2"><ArrowRightLeft className="size-3 inline" /> Assign</th>
-                <th className="text-right py-2 px-2">Stage Δ</th>
-                <th className="text-right py-2 px-2"><CheckCircle2 className="size-3 inline" /> Won</th>
+                <th className="text-right py-2 px-2"><MessageSquare className="size-3 inline" /> Chat</th>
+                <th className="text-right py-2 px-2"><CheckCircle2 className="size-3 inline" /> Closing</th>
                 <th className="text-right py-2 px-2"><Clock className="size-3 inline" /> Avg Respon</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">Belum ada aktivitas pada rentang ini.</td></tr>
+                <tr><td colSpan={5} className="text-center py-6 text-muted-foreground">Belum ada aktivitas pada rentang ini.</td></tr>
               )}
               {rows.map((r) => (
                 <tr key={r.id} className="border-b last:border-0 hover:bg-accent/40">
                   <td className="py-2 px-2 font-medium">{r.name}</td>
                   <td className="py-2 px-2 text-xs text-muted-foreground">{r.division}</td>
                   <td className="py-2 px-2 text-right">{r.outbound}</td>
-                  <td className="py-2 px-2 text-right">{r.assigned}</td>
-                  <td className="py-2 px-2 text-right">{r.stageChanges}</td>
                   <td className="py-2 px-2 text-right">
                     {r.won > 0 ? <Badge className="bg-emerald-500/15 text-emerald-500">{r.won}</Badge> : <span className="text-muted-foreground">0</span>}
                   </td>
