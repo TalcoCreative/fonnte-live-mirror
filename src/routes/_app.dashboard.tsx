@@ -1319,7 +1319,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
   }, [startISO, endISO, profiles, scopeIds]);
 
   const fmtTime = (s: number) => !s ? "-" : s < 60 ? `${s}d` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}j ${Math.floor((s % 3600) / 60)}m`;
-  const chartData = rows.slice(0, 10).map((r) => ({ name: r.name.split(" ")[0], Reply: r.outbound, Assign: r.assigned, Stage: r.stageChanges, Won: r.won }));
+  const chartData = rows.slice(0, 10).map((r) => ({ name: r.name.split(" ")[0], Reply: r.outbound, Won: r.won }));
 
   return (
     <>
@@ -1337,8 +1337,6 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
                 <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} wrapperStyle={tooltipWrapperStyle} cursor={tooltipCursor} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="Reply" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Assign" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Stage" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Won" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
