@@ -1287,7 +1287,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
           perAgent[id] = {
             id, name: p?.full_name || p?.email || "Tidak dikenal",
             division: p?.position || "—",
-            outbound: 0, assigned: 0, stageChanges: 0, won: 0, avgResp: 0, respCount: 0,
+            outbound: 0, won: 0, avgResp: 0, respCount: 0,
             buckets: HOUR_BUCKETS.map(() => 0),
           };
         }
@@ -1299,9 +1299,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
         if (scopeIds && !scopeIds.has(e.actor_id)) return;
         const a = ensure(e.actor_id);
         if (e.event_type === "chat_out") a.outbound++;
-        else if (["assigned", "reassigned", "conv_assigned", "conv_takeover"].includes(e.event_type)) a.assigned++;
         else if (e.event_type === "stage_changed") {
-          a.stageChanges++;
           const newId = e.new_value?.stage_id;
           if (newId && wonStageIds.has(newId)) a.won++;
         }
