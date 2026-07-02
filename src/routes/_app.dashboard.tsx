@@ -664,13 +664,11 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
 
   useEffect(() => {
     (async () => {
-      const [evRes, shRes, asRes, stRes, ctRes] = await Promise.all([
+      const [evRes, stRes, ctRes] = await Promise.all([
         supabase.from("audit_events")
           .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value, old_value")
           .gte("occurred_at", startISO).lte("occurred_at", endISO)
           .order("occurred_at", { ascending: true }).limit(20000),
-        supabase.from("shifts").select("id, name, start_time, end_time"),
-        supabase.from("agent_shifts").select("agent_id, shift_id, effective_from"),
         supabase.from("stages").select("id, name, order_index"),
         supabase.from("contacts").select("id, full_name, whatsapp_number, stage_id"),
       ]);
@@ -685,21 +683,22 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
       const nameById: Record<string, string> = {};
       profiles.forEach((p) => { nameById[p.id] = p.full_name || p.email || "Agent"; });
 
-      const shiftHours: Record<string, number> = {};
-      (shRes.data || []).forEach((s: any) => {
-        const [sh, sm] = (s.start_time || "00:00:00").split(":").map(Number);
-        const [eh, em] = (s.end_time || "00:00:00").split(":").map(Number);
-        let h = (eh + em / 60) - (sh + sm / 60);
-        if (h <= 0) h += 24;
-        shiftHours[s.id] = h;
+      // Jam kerja aktual per agent per hari dari audit_events (semua event dengan actor_id)
+      // dayKey = YYYY-MM-DD (lokal). first = event pertama, last = event terakhir.
+      type DayWork = { date: string; firstMs: number; lastMs: number; count: number };
+      const workByAgent: Record<string, Record<string, DayWork>> = {};
+      (events || []).forEach((e: any) => {
+        if (!e.actor_id) return;
+        const d = new Date(e.occurred_at);
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const t = d.getTime();
+        const perAgent = workByAgent[e.actor_id] = workByAgent[e.actor_id] || {};
+        const day = perAgent[dayKey] = perAgent[dayKey] || { date: dayKey, firstMs: t, lastMs: t, count: 0 };
+        if (t < day.firstMs) day.firstMs = t;
+        if (t > day.lastMs) day.lastMs = t;
+        day.count++;
       });
-      const avgShiftByAgent: Record<string, number> = {};
-      const cntShiftByAgent: Record<string, number> = {};
-      (asRes.data || []).forEach((a: any) => {
-        const h = shiftHours[a.shift_id] || 0;
-        avgShiftByAgent[a.agent_id] = (avgShiftByAgent[a.agent_id] || 0) + h;
-        cntShiftByAgent[a.agent_id] = (cntShiftByAgent[a.agent_id] || 0) + 1;
-      });
+
 
       const evs = (events || []) as any[];
       const newLeads = evs.filter((e) => e.event_type === "contact_created").length;
@@ -836,8 +835,9 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           closings: 0, closingShare: 0, closingLogs: [], shareLogs: [],
           totalHandleSec: 0, handleCount: 0,
         };
-        const cnt = cntShiftByAgent[id] || 0;
-        const avgShift = cnt ? (avgShiftByAgent[id] / cnt) : 0;
+        const daysWorked = workByAgent[id] ? Object.values(workByAgent[id]) : [];
+        const totalWorkH = daysWorked.reduce((sum, d) => sum + (d.lastMs - d.firstMs) / 3600000, 0);
+        const avgWorkH = daysWorked.length ? totalWorkH / daysWorked.length : 0;
         return {
           id, name: s.name,
           firstChats: s.firstChats,
@@ -849,8 +849,19 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           shareLogs: s.shareLogs,
           avgRespSec: s.responses ? Math.round(s.totalSec / s.responses) : 0,
           avgHandleSec: s.handleCount ? Math.round(s.totalHandleSec / s.handleCount) : 0,
-          avgShiftHours: +avgShift.toFixed(2),
+          avgWorkHours: +avgWorkH.toFixed(2),
+          daysActive: daysWorked.length,
+          dailyWork: daysWorked
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map((d) => ({
+              date: d.date,
+              startMs: d.firstMs,
+              endMs: d.lastMs,
+              hours: +((d.lastMs - d.firstMs) / 3600000).toFixed(2),
+              activities: d.count,
+            })),
         };
+
       }).sort((a, b) => b.firstChats - a.firstChats);
 
       // Aggregate KPIs
@@ -1082,6 +1093,8 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                     <th className="py-2 pr-3 text-right">Total Respon</th>
                     <th className="py-2 pr-3 text-right">Avg Resp.</th>
                     <th className="py-2 pr-3 text-right">Avg Handle</th>
+                    <th className="py-2 pr-3 text-right">Hari Aktif</th>
+                    <th className="py-2 pr-3 text-right">Avg Jam Kerja/Hari</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1103,6 +1116,8 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
                       <td className="py-2 pr-3 text-right font-mono">{a.responses}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.avgRespSec ? fmtTime(a.avgRespSec) : "-"}</td>
                       <td className="py-2 pr-3 text-right font-mono">{a.avgHandleSec ? fmtTime(a.avgHandleSec) : "-"}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.daysActive}</td>
+                      <td className="py-2 pr-3 text-right font-mono">{a.avgWorkHours > 0 ? `${a.avgWorkHours.toFixed(2)} j` : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1111,9 +1126,81 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           )}
         </CardContent>
       </Card>
+
+      {/* Rincian Jam Kerja Harian per Agent */}
+      <Card className="glow-soft">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Clock className="size-4" /> Rincian Jam Kerja Harian
+          </CardTitle>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            Dihitung dari log aktivitas (chat, ganti stage, assign). Jam kerja = selisih aktivitas pertama dan terakhir di hari tersebut.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {(!data.frAgents || data.frAgents.length === 0) ? (
+            <div className="text-sm text-muted-foreground text-center py-6">Tidak ada data aktivitas pada rentang ini.</div>
+          ) : (
+            data.frAgents.map((a: any) => (
+              <details key={a.id} className="border rounded-lg" open={data.frAgents.length <= 3}>
+                <summary className="cursor-pointer px-3 py-2 flex flex-wrap items-center justify-between gap-2 hover:bg-accent/30 rounded-lg">
+                  <span className="font-medium text-sm">{a.name}</span>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {a.daysActive} hari · Avg {a.avgWorkHours.toFixed(2)} j/hari
+                  </span>
+                </summary>
+                {a.dailyWork.length === 0 ? (
+                  <div className="p-3 text-xs text-muted-foreground">Tidak ada aktivitas.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-[10px] text-muted-foreground border-b border-t bg-muted/30">
+                          <th className="py-1.5 px-3">Tanggal</th>
+                          <th className="py-1.5 px-3">Mulai</th>
+                          <th className="py-1.5 px-3">Selesai</th>
+                          <th className="py-1.5 px-3 text-right">Jam Kerja</th>
+                          <th className="py-1.5 px-3 text-right">Aktivitas</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {a.dailyWork.map((d: any) => {
+                          const start = new Date(d.startMs);
+                          const end = new Date(d.endMs);
+                          const dayName = start.toLocaleDateString("id-ID", { weekday: "long", day: "2-digit", month: "short", year: "numeric" });
+                          const timeFmt = (dt: Date) => dt.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+                          return (
+                            <tr key={d.date} className="border-b last:border-0 hover:bg-accent/20">
+                              <td className="py-1.5 px-3">{dayName}</td>
+                              <td className="py-1.5 px-3 font-mono">{timeFmt(start)}</td>
+                              <td className="py-1.5 px-3 font-mono">{timeFmt(end)}</td>
+                              <td className="py-1.5 px-3 text-right font-mono">{d.hours.toFixed(2)} j</td>
+                              <td className="py-1.5 px-3 text-right font-mono">{d.activities}</td>
+                            </tr>
+                          );
+                        })}
+                        <tr className="bg-muted/40 font-medium">
+                          <td className="py-1.5 px-3" colSpan={3}>Total</td>
+                          <td className="py-1.5 px-3 text-right font-mono">
+                            {a.dailyWork.reduce((s: number, d: any) => s + d.hours, 0).toFixed(2)} j
+                          </td>
+                          <td className="py-1.5 px-3 text-right font-mono">
+                            {a.dailyWork.reduce((s: number, d: any) => s + d.activities, 0)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </details>
+            ))
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }
+
 
 /* ============================== PERFORMANCE ============================== */
 
