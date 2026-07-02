@@ -664,13 +664,11 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
 
   useEffect(() => {
     (async () => {
-      const [evRes, shRes, asRes, stRes, ctRes] = await Promise.all([
+      const [evRes, stRes, ctRes] = await Promise.all([
         supabase.from("audit_events")
           .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value, old_value")
           .gte("occurred_at", startISO).lte("occurred_at", endISO)
           .order("occurred_at", { ascending: true }).limit(20000),
-        supabase.from("shifts").select("id, name, start_time, end_time"),
-        supabase.from("agent_shifts").select("agent_id, shift_id, effective_from"),
         supabase.from("stages").select("id, name, order_index"),
         supabase.from("contacts").select("id, full_name, whatsapp_number, stage_id"),
       ]);
@@ -685,21 +683,22 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
       const nameById: Record<string, string> = {};
       profiles.forEach((p) => { nameById[p.id] = p.full_name || p.email || "Agent"; });
 
-      const shiftHours: Record<string, number> = {};
-      (shRes.data || []).forEach((s: any) => {
-        const [sh, sm] = (s.start_time || "00:00:00").split(":").map(Number);
-        const [eh, em] = (s.end_time || "00:00:00").split(":").map(Number);
-        let h = (eh + em / 60) - (sh + sm / 60);
-        if (h <= 0) h += 24;
-        shiftHours[s.id] = h;
+      // Jam kerja aktual per agent per hari dari audit_events (semua event dengan actor_id)
+      // dayKey = YYYY-MM-DD (lokal). first = event pertama, last = event terakhir.
+      type DayWork = { date: string; firstMs: number; lastMs: number; count: number };
+      const workByAgent: Record<string, Record<string, DayWork>> = {};
+      (events || []).forEach((e: any) => {
+        if (!e.actor_id) return;
+        const d = new Date(e.occurred_at);
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const t = d.getTime();
+        const perAgent = workByAgent[e.actor_id] = workByAgent[e.actor_id] || {};
+        const day = perAgent[dayKey] = perAgent[dayKey] || { date: dayKey, firstMs: t, lastMs: t, count: 0 };
+        if (t < day.firstMs) day.firstMs = t;
+        if (t > day.lastMs) day.lastMs = t;
+        day.count++;
       });
-      const avgShiftByAgent: Record<string, number> = {};
-      const cntShiftByAgent: Record<string, number> = {};
-      (asRes.data || []).forEach((a: any) => {
-        const h = shiftHours[a.shift_id] || 0;
-        avgShiftByAgent[a.agent_id] = (avgShiftByAgent[a.agent_id] || 0) + h;
-        cntShiftByAgent[a.agent_id] = (cntShiftByAgent[a.agent_id] || 0) + 1;
-      });
+
 
       const evs = (events || []) as any[];
       const newLeads = evs.filter((e) => e.event_type === "contact_created").length;
