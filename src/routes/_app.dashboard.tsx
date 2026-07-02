@@ -835,8 +835,9 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           closings: 0, closingShare: 0, closingLogs: [], shareLogs: [],
           totalHandleSec: 0, handleCount: 0,
         };
-        const cnt = cntShiftByAgent[id] || 0;
-        const avgShift = cnt ? (avgShiftByAgent[id] / cnt) : 0;
+        const daysWorked = workByAgent[id] ? Object.values(workByAgent[id]) : [];
+        const totalWorkH = daysWorked.reduce((sum, d) => sum + (d.lastMs - d.firstMs) / 3600000, 0);
+        const avgWorkH = daysWorked.length ? totalWorkH / daysWorked.length : 0;
         return {
           id, name: s.name,
           firstChats: s.firstChats,
@@ -848,8 +849,19 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           shareLogs: s.shareLogs,
           avgRespSec: s.responses ? Math.round(s.totalSec / s.responses) : 0,
           avgHandleSec: s.handleCount ? Math.round(s.totalHandleSec / s.handleCount) : 0,
-          avgShiftHours: +avgShift.toFixed(2),
+          avgWorkHours: +avgWorkH.toFixed(2),
+          daysActive: daysWorked.length,
+          dailyWork: daysWorked
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map((d) => ({
+              date: d.date,
+              startMs: d.firstMs,
+              endMs: d.lastMs,
+              hours: +((d.lastMs - d.firstMs) / 3600000).toFixed(2),
+              activities: d.count,
+            })),
         };
+
       }).sort((a, b) => b.firstChats - a.firstChats);
 
       // Aggregate KPIs
