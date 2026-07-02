@@ -1196,7 +1196,7 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
   return (
     <>
       <Card className="glow-soft">
-        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Trophy className="size-4" /> Top 10 Agent — Aktivitas</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Trophy className="size-4" /> Top Agent — Aktivitas</CardTitle></CardHeader>
         <CardContent>
           {chartData.length === 0 ? (
             <div className="text-sm text-muted-foreground text-center py-8">Belum ada data.</div>
