@@ -694,78 +694,20 @@ function AgentRow({ r, me, busy, onSave, onDelete }: { r: any; me: string | null
 }
 
 
-type Shift = { id: string; name: string; start_time: string; end_time: string; days_of_week: number[] | null; is_active: boolean };
-const DAY_LABELS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
-
 function OpsTab() {
-  const [shifts, setShifts] = useState<Shift[]>([]);
-  const [name, setName] = useState("");
-  const [startTime, setStartTime] = useState("08:00");
-  const [endTime, setEndTime] = useState("16:00");
-  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [slaGreen, setSlaGreen] = useState("5");
   const [slaYellow, setSlaYellow] = useState("10");
   const [busy, setBusy] = useState(false);
-  const [agents, setAgents] = useState<any[]>([]);
-  const [assignments, setAssignments] = useState<any[]>([]);
-  const [pickAgent, setPickAgent] = useState<string>("");
-  const [pickShift, setPickShift] = useState<string>("");
 
   async function loadAll() {
-    const [{ data: s }, { data: sg }, { data: sy }, { data: ag }, { data: asg }] = await Promise.all([
-      supabase.from("shifts").select("*").order("start_time"),
+    const [{ data: sg }, { data: sy }] = await Promise.all([
       supabase.from("system_settings").select("value").eq("key", "sla_green_minutes").maybeSingle(),
       supabase.from("system_settings").select("value").eq("key", "sla_yellow_minutes").maybeSingle(),
-      supabase.from("profiles").select("id, full_name, email, job_title").order("full_name"),
-      supabase.from("agent_shifts").select("id, agent_id, shift_id, effective_from").order("effective_from", { ascending: false }),
     ]);
-    setShifts((s as any) || []);
     if (sg?.value) setSlaGreen(String(sg.value).replace(/"/g, ""));
     if (sy?.value) setSlaYellow(String(sy.value).replace(/"/g, ""));
-    setAgents(ag || []);
-    setAssignments(asg || []);
   }
   useEffect(() => { loadAll(); }, []);
-
-  async function assignAgentShift() {
-    if (!pickAgent || !pickShift) return toast.error("Pilih agent & shift");
-    const { error } = await supabase.from("agent_shifts").insert({ agent_id: pickAgent, shift_id: pickShift });
-    if (error) return toast.error(error.message);
-    toast.success("Shift ditugaskan");
-    setPickAgent(""); setPickShift(""); loadAll();
-  }
-  async function removeAssignment(id: string) {
-    const { error } = await supabase.from("agent_shifts").delete().eq("id", id);
-    if (error) toast.error(error.message); else loadAll();
-  }
-
-
-  function toggleDay(d: number) {
-    setDays((prev) => prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort());
-  }
-
-  async function addShift() {
-    if (!name.trim()) return toast.error("Nama shift wajib");
-    setBusy(true);
-    const { error } = await supabase.from("shifts").insert({
-      name, start_time: startTime + ":00", end_time: endTime + ":00",
-      days_of_week: days, is_active: true,
-    });
-    setBusy(false);
-    if (error) toast.error(error.message);
-    else { toast.success("Shift ditambahkan"); setName(""); loadAll(); }
-  }
-
-  async function toggleShift(id: string, active: boolean) {
-    const { error } = await supabase.from("shifts").update({ is_active: active }).eq("id", id);
-    if (error) toast.error(error.message); else loadAll();
-  }
-
-  async function removeShift(id: string, name: string) {
-    if (!confirm(`Hapus shift "${name}"?`)) return;
-    const { error } = await supabase.from("shifts").delete().eq("id", id);
-    if (error) toast.error(error.message); else { toast.success("Shift dihapus"); loadAll(); }
-  }
 
   async function saveSla() {
     const g = parseInt(slaGreen, 10);
@@ -806,122 +748,10 @@ function OpsTab() {
           </Button>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Tambah Shift</CardTitle>
-          <CardDescription>Atur jam kerja & hari aktif setiap shift.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="space-y-1.5 md:col-span-2">
-              <Label>Nama Shift</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="cth: Pagi" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Mulai</Label>
-              <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Selesai</Label>
-              <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Hari Aktif</Label>
-            <div className="flex flex-wrap gap-1.5">
-              {DAY_LABELS.map((d, i) => (
-                <button key={i} type="button" onClick={() => toggleDay(i)}
-                  className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${
-                    days.includes(i) ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent"
-                  }`}>{d}</button>
-              ))}
-            </div>
-          </div>
-          <Button onClick={addShift} disabled={busy}>Tambah Shift</Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Daftar Shift ({shifts.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="border rounded-md divide-y">
-            {shifts.map((s) => (
-              <div key={s.id} className="p-3 flex items-center justify-between gap-3 flex-wrap">
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium text-sm flex items-center gap-2">
-                    {s.name}
-                    {!s.is_active && <Badge variant="outline" className="text-[10px]">Nonaktif</Badge>}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {s.start_time?.slice(0, 5)}–{s.end_time?.slice(0, 5)}
-                    {" · "}
-                    {(s.days_of_week || []).map((d) => DAY_LABELS[d]).join(", ") || "Setiap hari"}
-                  </div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => toggleShift(s.id, !s.is_active)}>
-                  {s.is_active ? "Nonaktifkan" : "Aktifkan"}
-                </Button>
-                <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10"
-                  onClick={() => removeShift(s.id, s.name)}>Hapus</Button>
-              </div>
-            ))}
-            {!shifts.length && <p className="p-3 text-sm text-muted-foreground">Belum ada shift.</p>}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Penjadwalan Agent</CardTitle>
-          <CardDescription>Tetapkan shift untuk masing-masing agent. Digunakan untuk monitoring & laporan.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-            <div className="space-y-1.5">
-              <Label>Agent</Label>
-              <select className="w-full h-9 rounded-md border bg-background px-2 text-sm" value={pickAgent} onChange={(e) => setPickAgent(e.target.value)}>
-                <option value="">Pilih agent…</option>
-                {agents.map((a) => <option key={a.id} value={a.id}>{a.full_name || a.email}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Shift</Label>
-              <select className="w-full h-9 rounded-md border bg-background px-2 text-sm" value={pickShift} onChange={(e) => setPickShift(e.target.value)}>
-                <option value="">Pilih shift…</option>
-                {shifts.filter((s) => s.is_active).map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.start_time?.slice(0,5)}–{s.end_time?.slice(0,5)})</option>
-                ))}
-              </select>
-            </div>
-            <Button onClick={assignAgentShift}>Tugaskan</Button>
-          </div>
-          <div className="border rounded-md divide-y">
-            {assignments.map((a) => {
-              const ag = agents.find((x) => x.id === a.agent_id);
-              const sh = shifts.find((x) => x.id === a.shift_id);
-              return (
-                <div key={a.id} className="p-3 flex items-center justify-between gap-3 text-sm">
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{ag?.full_name || ag?.email || "Agent"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {sh ? `${sh.name} · ${sh.start_time?.slice(0,5)}–${sh.end_time?.slice(0,5)}` : "—"}
-                      {" · sejak "}{a.effective_from}
-                    </div>
-                  </div>
-                  <Button size="sm" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => removeAssignment(a.id)}>Hapus</Button>
-                </div>
-              );
-            })}
-            {!assignments.length && <p className="p-3 text-sm text-muted-foreground">Belum ada penjadwalan agent.</p>}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
+
 
 function WorkflowTab() {
   const [stages, setStages] = useState<any[]>([]);
