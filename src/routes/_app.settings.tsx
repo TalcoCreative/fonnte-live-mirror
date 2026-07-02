@@ -33,7 +33,7 @@ function SettingsPage() {
     { v: "quick", label: "Quick Replies" },
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
-    { v: "ops", label: "Shift & SLA" },
+    { v: "ops", label: "SLA Inbox" },
     { v: "webhook", label: "Webhook" },
   ];
   return (
