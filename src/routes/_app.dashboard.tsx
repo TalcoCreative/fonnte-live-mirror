@@ -1377,24 +1377,20 @@ function PerformanceTab({ startISO, endISO, profiles, scopeIds }: {
               <tr>
                 <th className="text-left py-2 px-2">Agent</th>
                 <th className="text-left py-2 px-2">Divisi</th>
-                <th className="text-right py-2 px-2"><MessageSquare className="size-3 inline" /> Reply</th>
-                <th className="text-right py-2 px-2"><ArrowRightLeft className="size-3 inline" /> Assign</th>
-                <th className="text-right py-2 px-2">Stage Δ</th>
-                <th className="text-right py-2 px-2"><CheckCircle2 className="size-3 inline" /> Won</th>
+                <th className="text-right py-2 px-2"><MessageSquare className="size-3 inline" /> Chat</th>
+                <th className="text-right py-2 px-2"><CheckCircle2 className="size-3 inline" /> Closing</th>
                 <th className="text-right py-2 px-2"><Clock className="size-3 inline" /> Avg Respon</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-6 text-muted-foreground">Belum ada aktivitas pada rentang ini.</td></tr>
+                <tr><td colSpan={5} className="text-center py-6 text-muted-foreground">Belum ada aktivitas pada rentang ini.</td></tr>
               )}
               {rows.map((r) => (
                 <tr key={r.id} className="border-b last:border-0 hover:bg-accent/40">
                   <td className="py-2 px-2 font-medium">{r.name}</td>
                   <td className="py-2 px-2 text-xs text-muted-foreground">{r.division}</td>
                   <td className="py-2 px-2 text-right">{r.outbound}</td>
-                  <td className="py-2 px-2 text-right">{r.assigned}</td>
-                  <td className="py-2 px-2 text-right">{r.stageChanges}</td>
                   <td className="py-2 px-2 text-right">
                     {r.won > 0 ? <Badge className="bg-emerald-500/15 text-emerald-500">{r.won}</Badge> : <span className="text-muted-foreground">0</span>}
                   </td>
