@@ -866,7 +866,9 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
       const frAgents = frInScope.map((id) => {
         const s = fr[id] || {
           id, name: nameById[id] || "Agent",
-          firstChats: 0, continuedFromOther: 0, responses: 0, totalSec: 0,
+          firstChats: 0, continuedFromOther: 0,
+          responses: 0, respAnsweredCount: 0, respAnsweredTotalSec: 0,
+          firstRespCount: 0, firstRespTotalSec: 0, totalSec: 0,
           closings: 0, closingShare: 0, closingLogs: [], shareLogs: [],
           totalHandleSec: 0, handleCount: 0,
         };
@@ -882,7 +884,8 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           closingShare: +s.closingShare.toFixed(4),
           closingLogs: s.closingLogs,
           shareLogs: s.shareLogs,
-          avgRespSec: s.responses ? Math.round(s.totalSec / s.responses) : 0,
+          avgFirstRespSec: s.firstRespCount ? Math.round(s.firstRespTotalSec / s.firstRespCount) : 0,
+          avgRespSec: s.respAnsweredCount ? Math.round(s.respAnsweredTotalSec / s.respAnsweredCount) : 0,
           avgHandleSec: s.handleCount ? Math.round(s.totalHandleSec / s.handleCount) : 0,
           avgWorkHours: +avgWorkH.toFixed(2),
           daysActive: daysWorked.length,
@@ -896,8 +899,8 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
               activities: d.count,
             })),
         };
-
       }).sort((a, b) => b.firstChats - a.firstChats);
+
 
       // Aggregate KPIs
       const totalFirst = frAgents.reduce((s, a) => s + a.firstChats, 0);
