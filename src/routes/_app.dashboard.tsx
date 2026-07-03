@@ -1087,7 +1087,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
         </Card>
 
         <Card className="glow-soft">
-          <CardHeader><CardTitle className="text-base">Beban Per Jam (Inbound)</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Beban Per Jam (Leads Baru)</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={data.hourlyData}>
