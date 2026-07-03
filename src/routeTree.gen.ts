@@ -16,11 +16,13 @@ import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppMyLeadsRouteImport } from './routes/_app.my-leads'
 import { Route as AppMyInboxRouteImport } from './routes/_app.my-inbox'
 import { Route as AppLeadsRouteImport } from './routes/_app.leads'
+import { Route as AppInvitationsRouteImport } from './routes/_app.invitations'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppBroadcastRouteImport } from './routes/_app.broadcast'
 import { Route as AppAdsContentRouteImport } from './routes/_app.ads-content'
 import { Route as AppActivityRouteImport } from './routes/_app.activity'
+import { Route as AppInvitationIdRouteImport } from './routes/_app.invitation.$id'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -56,6 +58,11 @@ const AppLeadsRoute = AppLeadsRouteImport.update({
   path: '/leads',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInvitationsRoute = AppInvitationsRouteImport.update({
+  id: '/invitations',
+  path: '/invitations',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppInboxRoute = AppInboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
@@ -81,6 +88,11 @@ const AppActivityRoute = AppActivityRouteImport.update({
   path: '/activity',
   getParentRoute: () => AppRoute,
 } as any)
+const AppInvitationIdRoute = AppInvitationIdRouteImport.update({
+  id: '/invitation/$id',
+  path: '/invitation/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -90,10 +102,12 @@ export interface FileRoutesByFullPath {
   '/broadcast': typeof AppBroadcastRoute
   '/dashboard': typeof AppDashboardRoute
   '/inbox': typeof AppInboxRoute
+  '/invitations': typeof AppInvitationsRoute
   '/leads': typeof AppLeadsRoute
   '/my-inbox': typeof AppMyInboxRoute
   '/my-leads': typeof AppMyLeadsRoute
   '/settings': typeof AppSettingsRoute
+  '/invitation/$id': typeof AppInvitationIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -103,10 +117,12 @@ export interface FileRoutesByTo {
   '/broadcast': typeof AppBroadcastRoute
   '/dashboard': typeof AppDashboardRoute
   '/inbox': typeof AppInboxRoute
+  '/invitations': typeof AppInvitationsRoute
   '/leads': typeof AppLeadsRoute
   '/my-inbox': typeof AppMyInboxRoute
   '/my-leads': typeof AppMyLeadsRoute
   '/settings': typeof AppSettingsRoute
+  '/invitation/$id': typeof AppInvitationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -118,10 +134,12 @@ export interface FileRoutesById {
   '/_app/broadcast': typeof AppBroadcastRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/inbox': typeof AppInboxRoute
+  '/_app/invitations': typeof AppInvitationsRoute
   '/_app/leads': typeof AppLeadsRoute
   '/_app/my-inbox': typeof AppMyInboxRoute
   '/_app/my-leads': typeof AppMyLeadsRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/invitation/$id': typeof AppInvitationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -133,10 +151,12 @@ export interface FileRouteTypes {
     | '/broadcast'
     | '/dashboard'
     | '/inbox'
+    | '/invitations'
     | '/leads'
     | '/my-inbox'
     | '/my-leads'
     | '/settings'
+    | '/invitation/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -146,10 +166,12 @@ export interface FileRouteTypes {
     | '/broadcast'
     | '/dashboard'
     | '/inbox'
+    | '/invitations'
     | '/leads'
     | '/my-inbox'
     | '/my-leads'
     | '/settings'
+    | '/invitation/$id'
   id:
     | '__root__'
     | '/'
@@ -160,10 +182,12 @@ export interface FileRouteTypes {
     | '/_app/broadcast'
     | '/_app/dashboard'
     | '/_app/inbox'
+    | '/_app/invitations'
     | '/_app/leads'
     | '/_app/my-inbox'
     | '/_app/my-leads'
     | '/_app/settings'
+    | '/_app/invitation/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -223,6 +247,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLeadsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/invitations': {
+      id: '/_app/invitations'
+      path: '/invitations'
+      fullPath: '/invitations'
+      preLoaderRoute: typeof AppInvitationsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/inbox': {
       id: '/_app/inbox'
       path: '/inbox'
@@ -258,6 +289,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppActivityRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/invitation/$id': {
+      id: '/_app/invitation/$id'
+      path: '/invitation/$id'
+      fullPath: '/invitation/$id'
+      preLoaderRoute: typeof AppInvitationIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -267,10 +305,12 @@ interface AppRouteChildren {
   AppBroadcastRoute: typeof AppBroadcastRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppInboxRoute: typeof AppInboxRoute
+  AppInvitationsRoute: typeof AppInvitationsRoute
   AppLeadsRoute: typeof AppLeadsRoute
   AppMyInboxRoute: typeof AppMyInboxRoute
   AppMyLeadsRoute: typeof AppMyLeadsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppInvitationIdRoute: typeof AppInvitationIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -279,10 +319,12 @@ const AppRouteChildren: AppRouteChildren = {
   AppBroadcastRoute: AppBroadcastRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppInboxRoute: AppInboxRoute,
+  AppInvitationsRoute: AppInvitationsRoute,
   AppLeadsRoute: AppLeadsRoute,
   AppMyInboxRoute: AppMyInboxRoute,
   AppMyLeadsRoute: AppMyLeadsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppInvitationIdRoute: AppInvitationIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -295,13 +337,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

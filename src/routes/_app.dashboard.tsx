@@ -664,13 +664,15 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
 
   useEffect(() => {
     (async () => {
-      const [evRes, stRes, ctRes] = await Promise.all([
+      const [evRes, stRes, ctRes, shRes, asRes] = await Promise.all([
         supabase.from("audit_events")
           .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value, old_value")
           .gte("occurred_at", startISO).lte("occurred_at", endISO)
           .order("occurred_at", { ascending: true }).limit(20000),
         supabase.from("stages").select("id, name, order_index"),
-        supabase.from("contacts").select("id, full_name, whatsapp_number, stage_id"),
+        supabase.from("contacts").select("id, full_name, whatsapp_number, stage_id, created_at"),
+        supabase.from("shifts").select("id, start_time, end_time, days_of_week, is_active").eq("is_active", true),
+        supabase.from("agent_shifts").select("agent_id, shift_id, effective_from"),
       ]);
       const events = evRes.data;
       const stagesAll = (stRes.data || []) as any[];
@@ -680,11 +682,48 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
       const contactById: Record<string, any> = {};
       (ctRes.data || []).forEach((c: any) => { contactById[c.id] = c; });
 
+      // Build shift lookup by agent
+      const shiftById: Record<string, any> = {};
+      ((shRes.data as any[]) || []).forEach((s) => { shiftById[s.id] = s; });
+      const agentShiftMap: Record<string, { shift: any; effective_from: string }[]> = {};
+      ((asRes.data as any[]) || []).forEach((a) => {
+        const s = shiftById[a.shift_id]; if (!s) return;
+        (agentShiftMap[a.agent_id] = agentShiftMap[a.agent_id] || []).push({ shift: s, effective_from: a.effective_from });
+      });
+
+      // Return true if timestamp ms is inside any active shift window for this agent
+      const anyShiftConfigured = Object.keys(agentShiftMap).length > 0;
+      function inShift(agentId: string, ts: number): boolean {
+        // If no shifts configured anywhere → don't filter (backward compat)
+        if (!anyShiftConfigured) return true;
+        const shifts = agentShiftMap[agentId];
+        if (!shifts || !shifts.length) return false; // agent tanpa shift → tidak dihitung
+        const d = new Date(ts);
+        const dayKey = d.toISOString().slice(0, 10);
+        const dow = d.getDay();
+        const mins = d.getHours() * 60 + d.getMinutes();
+        for (const { shift, effective_from } of shifts) {
+          if (effective_from && effective_from > dayKey) continue;
+          const days: number[] = shift.days_of_week || [];
+          if (days.length && !days.includes(dow)) continue;
+          const [sh, sm] = String(shift.start_time).split(":").map(Number);
+          const [eh, em] = String(shift.end_time).split(":").map(Number);
+          const sMin = sh * 60 + sm;
+          const eMin = eh * 60 + em;
+          if (sMin <= eMin) {
+            if (mins >= sMin && mins < eMin) return true;
+          } else {
+            // wrap midnight
+            if (mins >= sMin || mins < eMin) return true;
+          }
+        }
+        return false;
+      }
+
       const nameById: Record<string, string> = {};
       profiles.forEach((p) => { nameById[p.id] = p.full_name || p.email || "Agent"; });
 
       // Jam kerja aktual per agent per hari dari audit_events (semua event dengan actor_id)
-      // dayKey = YYYY-MM-DD (lokal). first = event pertama, last = event terakhir.
       type DayWork = { date: string; firstMs: number; lastMs: number; count: number };
       const workByAgent: Record<string, Record<string, DayWork>> = {};
       (events || []).forEach((e: any) => {
@@ -745,14 +784,15 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
         } else if (e.event_type === "chat_out" && e.actor_id) {
           const isFRAgent = frUserIds.has(e.actor_id);
           const inScope = !effectiveScope || effectiveScope.has(e.actor_id);
+          const withinShift = inShift(e.actor_id, t);
 
-          // --- First response (per cycle) ---
+          // --- First response (per cycle) — only if within agent's shift ---
           if (isFRAgent && !firstResponderByContact[e.contact_id]) {
             const s = ensureFR(e.actor_id);
             firstResponderByContact[e.contact_id] = e.actor_id;
             s.firstChats++;
             firstHandleAt[e.contact_id] = t;
-            if (cycleFirstInboundTs[e.contact_id]) {
+            if (cycleFirstInboundTs[e.contact_id] && withinShift) {
               const frSec = Math.max(0, Math.round((t - cycleFirstInboundTs[e.contact_id]) / 1000));
               s.firstRespTotalSec += frSec;
               s.firstRespCount++;
@@ -764,24 +804,25 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
             if (!hist.includes(e.actor_id)) s.continuedFromOther++;
           }
 
-          // Owner history (unique, ordered) — include the first responder too
           const hist = ownerHistory[e.contact_id] = ownerHistory[e.contact_id] || [];
           if (isFRAgent && hist[hist.length - 1] !== e.actor_id) hist.push(e.actor_id);
 
-          // --- Per-bubble response ---
+          // --- Per-bubble response — only if within shift ---
           if (isFRAgent) {
             const s = ensureFR(e.actor_id);
             s.responses++;
-            if (pendingInboundTs[e.contact_id]) {
+            if (pendingInboundTs[e.contact_id] && withinShift) {
               const seconds = Math.max(0, Math.round((t - pendingInboundTs[e.contact_id]) / 1000));
               s.respAnsweredCount++;
               s.respAnsweredTotalSec += seconds;
               s.totalSec += seconds;
               if (inScope) responses.push({ contact_id: e.contact_id, actor_id: e.actor_id, seconds, at: e.occurred_at });
               delete pendingInboundTs[e.contact_id];
+            } else if (pendingInboundTs[e.contact_id]) {
+              // Answered but outside shift → consume without crediting
+              delete pendingInboundTs[e.contact_id];
             }
           } else {
-            // Non-FR outbound (e.g. bot) still consumes the pending inbound so it isn't over-credited later
             if (pendingInboundTs[e.contact_id]) delete pendingInboundTs[e.contact_id];
           }
         } else if (e.event_type === "stage_changed" && e.actor_id && frUserIds.has(e.actor_id)) {
@@ -796,7 +837,8 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
             const contact = contactById[e.contact_id] || {};
             const handleSec = firstHandleAt[e.contact_id]
               ? Math.round((t - firstHandleAt[e.contact_id]) / 1000) : 0;
-            if (handleSec > 0) { closer.totalHandleSec += handleSec; closer.handleCount++; }
+            const closerInShift = inShift(e.actor_id, t);
+            if (handleSec > 0 && closerInShift) { closer.totalHandleSec += handleSec; closer.handleCount++; }
             const closingLog = {
               contact_id: e.contact_id,
               customer: contact.full_name || contact.whatsapp_number || "—",
@@ -923,9 +965,10 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
       const activeFRCount = frInScope.length;
       const avgLeadsPerFR = activeFRCount ? +(totalLeadsHandled / activeFRCount).toFixed(2) : 0;
 
+      // Beban per Jam = jumlah leads baru per jam (contact_created), bukan tiap chat_in bubble.
       const hourly: Record<number, number> = {};
       for (let h = 0; h < 24; h++) hourly[h] = 0;
-      evs.filter((e) => e.event_type === "chat_in").forEach((e) => {
+      evs.filter((e) => e.event_type === "contact_created").forEach((e) => {
         const h = new Date(e.occurred_at).getHours();
         hourly[h]++;
       });
@@ -1044,7 +1087,7 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
         </Card>
 
         <Card className="glow-soft">
-          <CardHeader><CardTitle className="text-base">Beban Per Jam (Inbound)</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Beban Per Jam (Leads Baru)</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={data.hourlyData}>

@@ -316,6 +316,37 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   async function assignAgent(agentId: string | null) {
     if (!activeId) return;
     const prev = active?.assigned_agent_id || null;
+
+    // First Response: pakai flow invitation, bukan langsung assign
+    if (isFirstResponse && agentId && agentId !== user?.id) {
+      // Cegah invitation duplikat pending
+      const { data: existing } = await supabase.from("assignment_invitations")
+        .select("id").eq("conversation_id", activeId).eq("status", "pending").maybeSingle();
+      if (existing) {
+        toast.error("Sudah ada undangan pending untuk chat ini. Batalkan dulu di /invitations.");
+        return;
+      }
+      const { data: inv, error } = await supabase.from("assignment_invitations").insert({
+        conversation_id: activeId,
+        contact_id: active!.contact_id,
+        from_user_id: user!.id,
+        to_user_id: agentId,
+        status: "pending",
+        previous_stage_id: active!.contact?.stage_id || null,
+      } as any).select().single();
+      if (error) { toast.error(error.message); return; }
+      await logAction("send_invitation", {
+        contact_name: active?.contact?.full_name, whatsapp: active?.contact?.whatsapp_number,
+        to_agent: agentId, to_name: agentName(agentId),
+        invitation_id: inv?.id,
+      });
+      supabase.functions.invoke("notify-agent-assign", {
+        body: { conversation_id: activeId, agent_id: agentId, invitation_id: inv?.id },
+      }).catch(() => {});
+      toast.success(`Undangan dikirim ke ${agentName(agentId)}. Menunggu diterima.`);
+      return;
+    }
+
     const { error } = await supabase.from("conversations").update({ assigned_agent_id: agentId }).eq("id", activeId);
     if (error) return toast.error(error.message);
     await logAction("assign_agent", {

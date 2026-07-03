@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  LayoutDashboard, MessageSquare, Users, Settings, LogOut, Send, Inbox, UserCircle2, Activity, Megaphone,
+  LayoutDashboard, MessageSquare, Users, Settings, LogOut, Send, Inbox, UserCircle2, Activity, Megaphone, Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import husadaLogo from "@/assets/husada-logo-v2.png.asset.json";
@@ -14,12 +14,13 @@ export const Route = createFileRoute("/_app")({
   component: AppLayout,
 });
 
-type NavItem = { to: string; label: string; icon: any; crucial: boolean; roles?: AppRole[] };
+type NavItem = { to: string; label: string; icon: any; crucial: boolean; roles?: AppRole[]; badgeKey?: "invitations" };
 const ALL_NAV: NavItem[] = [
   // Dashboard tidak untuk First Response — mereka fokus di Inbox saja.
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, crucial: false, roles: ["super_admin", "admin", "agent"] },
   { to: "/inbox", label: "Inbox", icon: MessageSquare, crucial: true },
   { to: "/my-inbox", label: "My Inbox", icon: Inbox, crucial: false },
+  { to: "/invitations", label: "Undangan", icon: Mail, crucial: false, badgeKey: "invitations" },
   { to: "/leads", label: "Leads", icon: Users, crucial: true, roles: ["super_admin", "admin", "agent"] },
   { to: "/my-leads", label: "My Leads", icon: UserCircle2, crucial: false, roles: ["super_admin", "admin", "agent"] },
   { to: "/broadcast", label: "Broadcast", icon: Send, crucial: false, roles: ["super_admin", "admin", "agent"] },
@@ -34,6 +35,7 @@ function AppLayout() {
   const location = useLocation();
   const [profileName, setProfileName] = useState<string>("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState(0);
   usePushNotifications(!!user);
   const { role } = useRole();
 
@@ -47,6 +49,22 @@ function AppLayout() {
         .then(({ data }) => setProfileName(data?.full_name || data?.email?.split("@")[0] || ""));
     }
   }, [user]);
+
+  // Pending invitations count (realtime)
+  useEffect(() => {
+    if (!user) return;
+    const load = async () => {
+      const { count } = await supabase.from("assignment_invitations")
+        .select("id", { count: "exact", head: true })
+        .eq("to_user_id", user.id).eq("status", "pending");
+      setPendingInvites(count || 0);
+    };
+    load();
+    const ch = supabase.channel("nav-invites-" + user.id)
+      .on("postgres_changes", { event: "*", schema: "public", table: "assignment_invitations" }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.id]);
 
   // Global online heartbeat — jalan di semua halaman selama user login.
   useEffect(() => {
@@ -98,14 +116,18 @@ function AppLayout() {
           <nav className="hidden md:flex flex-1 items-center gap-1 overflow-x-auto no-scrollbar">
             {navItems.map((item) => {
               const active = location.pathname === item.to || location.pathname.startsWith(item.to + "/");
+              const badge = item.badgeKey === "invitations" ? pendingInvites : 0;
               return (
                 <Link key={item.to} to={item.to}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all",
+                    "relative flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs md:text-sm font-medium whitespace-nowrap transition-all",
                     active ? "bg-primary text-primary-foreground glow-primary" : "text-foreground/70 hover:text-foreground hover:bg-accent/60"
                   )}>
                   <item.icon className="size-4" />
                   <span>{item.label}</span>
+                  {badge > 0 && (
+                    <span className="ml-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold grid place-items-center">{badge}</span>
+                  )}
                 </Link>
               );
             })}
