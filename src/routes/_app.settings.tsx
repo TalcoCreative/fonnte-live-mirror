@@ -33,6 +33,7 @@ function SettingsPage() {
     { v: "quick", label: "Quick Replies" },
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
+    { v: "shifts", label: "Shift & Jadwal" },
     { v: "ops", label: "SLA Inbox" },
     { v: "webhook", label: "Webhook" },
   ];
@@ -62,6 +63,7 @@ function SettingsPage() {
         {tab === "quick" && <QuickRepliesTab />}
         {tab === "products" && <ProductsTab />}
         {tab === "team" && <TeamTab />}
+        {tab === "shifts" && <ShiftsTab />}
         {tab === "ops" && <OpsTab />}
         {tab === "webhook" && <WebhookTab />}
       </div>
@@ -929,5 +931,190 @@ function TestNotifyButton({ agent }: { agent: any }) {
     </Dialog>
   );
 }
+
+
+const DAY_LABELS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+
+function ShiftsTab() {
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [start, setStart] = useState("08:00");
+  const [end, setEnd] = useState("16:00");
+  const [color, setColor] = useState("#0ea5e9");
+  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const [{ data: sh }, { data: pf }, { data: asg }] = await Promise.all([
+      supabase.from("shifts").select("*").order("start_time"),
+      supabase.from("profiles").select("id, full_name, email, position"),
+      supabase.from("agent_shifts").select("*"),
+    ]);
+    setShifts((sh as any[]) || []);
+    setAgents((pf as any[]) || []);
+    setAssignments((asg as any[]) || []);
+    setLoading(false);
+  }
+  useEffect(() => { load(); }, []);
+
+  async function addShift() {
+    if (!name.trim() || !days.length) return toast.error("Nama & minimal 1 hari wajib diisi");
+    setBusy(true);
+    const { error } = await supabase.from("shifts").insert({
+      name: name.trim(), start_time: start, end_time: end, color, days_of_week: days, is_active: true,
+    } as any);
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    setName(""); load();
+    toast.success("Shift dibuat");
+  }
+
+  async function removeShift(id: string) {
+    if (!confirm("Hapus shift ini? Semua assignment agent ke shift ini ikut terhapus.")) return;
+    const { error } = await supabase.from("shifts").delete().eq("id", id);
+    if (error) toast.error(error.message); else { toast.success("Shift dihapus"); load(); }
+  }
+
+  async function toggleAgentShift(agentId: string, shiftId: string, on: boolean) {
+    if (on) {
+      const { error } = await supabase.from("agent_shifts").insert({ agent_id: agentId, shift_id: shiftId } as any);
+      if (error && !error.message.includes("duplicate")) return toast.error(error.message);
+    } else {
+      const row = assignments.find((a) => a.agent_id === agentId && a.shift_id === shiftId);
+      if (row) await supabase.from("agent_shifts").delete().eq("id", row.id);
+    }
+    load();
+  }
+
+  if (loading) return <div className="mt-4 text-sm text-muted-foreground">Memuat…</div>;
+
+  return (
+    <div className="space-y-4 mt-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Buat Shift Baru</CardTitle>
+          <CardDescription>Definisikan window jam kerja. Metrik First Response di dashboard dihitung <b>hanya di dalam jam shift</b> agent.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
+            <div className="md:col-span-2 space-y-1.5">
+              <Label>Nama Shift</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="cth: Pagi" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Mulai</Label>
+              <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Selesai</Label>
+              <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Warna</Label>
+              <Input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-10 p-1" />
+            </div>
+            <div className="flex items-end">
+              <Button onClick={addShift} disabled={busy} className="w-full">Tambah</Button>
+            </div>
+          </div>
+          <div className="mt-3">
+            <Label className="text-xs text-muted-foreground">Hari aktif</Label>
+            <div className="flex gap-1 flex-wrap mt-1">
+              {DAY_LABELS.map((d, i) => {
+                const on = days.includes(i);
+                return (
+                  <button key={i} type="button" onClick={() => setDays(on ? days.filter((x) => x !== i) : [...days, i].sort())}
+                    className={`px-3 py-1.5 rounded-md text-xs border ${on ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent"}`}>
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Daftar Shift ({shifts.length})</CardTitle></CardHeader>
+        <CardContent>
+          {shifts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Belum ada shift. Buat dulu di atas.</p>
+          ) : (
+            <div className="space-y-2">
+              {shifts.map((s) => (
+                <div key={s.id} className="border rounded-lg p-3 flex items-center gap-3 flex-wrap">
+                  <span className="size-4 rounded" style={{ background: s.color }} />
+                  <span className="font-medium">{s.name}</span>
+                  <span className="text-xs font-mono text-muted-foreground">{s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}</span>
+                  <div className="flex gap-1 flex-wrap">
+                    {(s.days_of_week || []).map((d: number) => (
+                      <Badge key={d} variant="outline" className="text-[10px]">{DAY_LABELS[d]}</Badge>
+                    ))}
+                  </div>
+                  <Button size="sm" variant="ghost" className="ml-auto text-destructive" onClick={() => removeShift(s.id)}>Hapus</Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Assign Agent ke Shift</CardTitle>
+          <CardDescription>Centang shift yang agent ini jaga. Bisa lebih dari satu shift.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {shifts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Buat shift dulu.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] text-muted-foreground border-b">
+                    <th className="py-2 pr-3">Agent</th>
+                    {shifts.map((s) => (
+                      <th key={s.id} className="py-2 px-2 text-center">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="size-2 rounded-full" style={{ background: s.color }} />
+                          {s.name}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {agents.map((a) => (
+                    <tr key={a.id} className="border-b last:border-0 hover:bg-accent/30">
+                      <td className="py-2 pr-3">
+                        <div className="font-medium">{a.full_name || a.email}</div>
+                        {a.position && <div className="text-[10px] text-muted-foreground">{a.position}</div>}
+                      </td>
+                      {shifts.map((s) => {
+                        const on = !!assignments.find((x) => x.agent_id === a.id && x.shift_id === s.id);
+                        return (
+                          <td key={s.id} className="py-2 px-2 text-center">
+                            <input type="checkbox" checked={on}
+                              onChange={(e) => toggleAgentShift(a.id, s.id, e.target.checked)}
+                              className="size-4 cursor-pointer" />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 
 

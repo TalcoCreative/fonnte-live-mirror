@@ -85,6 +85,70 @@ export type Database = {
           },
         ]
       }
+      assignment_invitations: {
+        Row: {
+          contact_id: string
+          conversation_id: string
+          created_at: string
+          from_user_id: string
+          id: string
+          note: string | null
+          previous_stage_id: string | null
+          reject_reason: string | null
+          responded_at: string | null
+          status: string
+          to_user_id: string
+        }
+        Insert: {
+          contact_id: string
+          conversation_id: string
+          created_at?: string
+          from_user_id: string
+          id?: string
+          note?: string | null
+          previous_stage_id?: string | null
+          reject_reason?: string | null
+          responded_at?: string | null
+          status?: string
+          to_user_id: string
+        }
+        Update: {
+          contact_id?: string
+          conversation_id?: string
+          created_at?: string
+          from_user_id?: string
+          id?: string
+          note?: string | null
+          previous_stage_id?: string | null
+          reject_reason?: string | null
+          responded_at?: string | null
+          status?: string
+          to_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignment_invitations_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_invitations_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_invitations_previous_stage_id_fkey"
+            columns: ["previous_stage_id"]
+            isOneToOne: false
+            referencedRelation: "stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_events: {
         Row: {
           actor_id: string | null
@@ -744,6 +808,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      fr_can_see_contact: { Args: { _contact_id: string }; Returns: boolean }
+      fr_can_see_conversation: { Args: { _conv_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
