@@ -323,7 +323,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       const { data: existing } = await supabase.from("assignment_invitations")
         .select("id").eq("conversation_id", activeId).eq("status", "pending").maybeSingle();
       if (existing) {
-        toast.error("Sudah ada undangan pending untuk chat ini. Batalkan dulu di /invitations.");
+        toast.error("Sudah ada invitation pending untuk chat ini. Batalkan dulu di /invitations.");
         return;
       }
       const { data: inv, error } = await supabase.from("assignment_invitations").insert({
@@ -341,9 +341,9 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
         invitation_id: inv?.id,
       });
       supabase.functions.invoke("notify-agent-assign", {
-        body: { conversation_id: activeId, agent_id: agentId, invitation_id: inv?.id },
+        body: { conversation_id: activeId, agent_id: agentId, invitation_id: inv?.id, mode: "invitation" },
       }).catch(() => {});
-      toast.success(`Undangan dikirim ke ${agentName(agentId)}. Menunggu diterima.`);
+      toast.success(`Invitation dikirim ke ${agentName(agentId)}. Menunggu diterima.`);
       return;
     }
 
