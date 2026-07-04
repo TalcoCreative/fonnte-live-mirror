@@ -113,7 +113,7 @@ function InvitationPage() {
     }).eq("id", inv.id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Undangan dibatalkan.");
+    toast.success("Invitation dibatalkan.");
     load();
   }
 
