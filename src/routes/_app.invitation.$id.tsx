@@ -11,7 +11,7 @@ import { Loader2, CheckCircle2, XCircle, MessageSquare, ArrowLeft, User as UserI
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/invitation/$id")({
-  head: () => ({ meta: [{ title: "Undangan Penugasan — Husada CRM" }] }),
+  head: () => ({ meta: [{ title: "Invitation — Husada CRM" }] }),
   component: InvitationPage,
 });
 
