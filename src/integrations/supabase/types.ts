@@ -96,6 +96,7 @@ export type Database = {
           previous_stage_id: string | null
           reject_reason: string | null
           responded_at: string | null
+          snapshot_at: string
           status: string
           to_user_id: string
         }
@@ -109,6 +110,7 @@ export type Database = {
           previous_stage_id?: string | null
           reject_reason?: string | null
           responded_at?: string | null
+          snapshot_at?: string
           status?: string
           to_user_id: string
         }
@@ -122,6 +124,7 @@ export type Database = {
           previous_stage_id?: string | null
           reject_reason?: string | null
           responded_at?: string | null
+          snapshot_at?: string
           status?: string
           to_user_id?: string
         }
