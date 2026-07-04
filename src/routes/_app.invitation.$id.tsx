@@ -100,7 +100,7 @@ function InvitationPage() {
       entity_type: "conversation", entity_id: inv.conversation_id,
       metadata: { invitation_id: inv.id, reason: rejectReason.trim(), returned_to: inv.from_user_id },
     } as any);
-    toast.success("Undangan ditolak. Lead dikembalikan ke First Response.");
+    toast.success("Invitation ditolak. Lead dikembalikan ke First Response.");
     setBusy(false);
     load();
   }
