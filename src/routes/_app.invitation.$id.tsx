@@ -255,7 +255,7 @@ function InvitationPage() {
             <div className="text-sm text-muted-foreground flex items-center gap-2">
               <UserIcon className="size-4" /> Menunggu respon agent.
             </div>
-            <Button variant="outline" onClick={cancel} disabled={busy}>Batalkan Undangan</Button>
+            <Button variant="outline" onClick={cancel} disabled={busy}>Batalkan Invitation</Button>
           </CardContent>
         </Card>
       )}
@@ -263,7 +263,7 @@ function InvitationPage() {
       {inv.status !== "pending" && (
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">
-            Undangan sudah <b>{inv.status}</b> pada {inv.responded_at ? new Date(inv.responded_at).toLocaleString("id-ID") : "-"}.
+            Invitation sudah <b>{inv.status}</b> pada {inv.responded_at ? new Date(inv.responded_at).toLocaleString("id-ID") : "-"}.
           </CardContent>
         </Card>
       )}
