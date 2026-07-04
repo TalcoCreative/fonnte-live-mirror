@@ -137,7 +137,7 @@ function InvitationPage() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <MessageSquare className="size-5 text-primary" />
-                Undangan Penugasan
+                Invitation Penugasan
               </CardTitle>
               <CardDescription className="mt-1">
                 Dari <b>{fromName}</b> untuk <b>{contact?.full_name || contact?.whatsapp_number}</b>
