@@ -32,12 +32,13 @@ function InvitationPage() {
   async function load() {
     setLoading(true);
     const { data: invRow, error } = await supabase.from("assignment_invitations").select("*").eq("id", id).maybeSingle();
-    if (error || !invRow) { toast.error("Undangan tidak ditemukan"); router.navigate({ to: "/inbox" }); return; }
+    if (error || !invRow) { toast.error("Invitation tidak ditemukan"); router.navigate({ to: "/inbox" }); return; }
     setInv(invRow);
+    const snapshotAt = (invRow as any).snapshot_at || invRow.created_at;
     const [{ data: c }, { data: conv }, { data: msgs }, { data: fromProf }, { data: st }] = await Promise.all([
       supabase.from("contacts").select("*").eq("id", invRow.contact_id).maybeSingle(),
       supabase.from("conversations").select("*").eq("id", invRow.conversation_id).maybeSingle(),
-      supabase.from("messages").select("*").eq("conversation_id", invRow.conversation_id).order("sent_at", { ascending: true }),
+      supabase.from("messages").select("*").eq("conversation_id", invRow.conversation_id).lte("sent_at", snapshotAt).order("sent_at", { ascending: true }),
       supabase.from("profiles").select("full_name,email").eq("id", invRow.from_user_id).maybeSingle(),
       invRow.previous_stage_id
         ? supabase.from("stages").select("name,color").eq("id", invRow.previous_stage_id).maybeSingle()
