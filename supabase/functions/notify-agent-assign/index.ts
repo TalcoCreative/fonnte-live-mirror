@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     if (!assigner) return json({ error: "Unauthorized" }, 401);
 
     const body = await req.json();
-    const { conversation_id, agent_id, test, message: customMessage } = body;
+    const { conversation_id, agent_id, test, message: customMessage, mode, invitation_id } = body;
     if (!agent_id) return json({ error: "agent_id required" }, 400);
     if (!test && !conversation_id) return json({ error: "conversation_id required" }, 400);
 
@@ -63,13 +63,24 @@ Deno.serve(async (req) => {
       const c: any = conv?.contact || {};
       const productName = c.product?.name || "—";
       const assignerName = assignerProf?.full_name || assignerProf?.email?.split("@")[0] || "Admin";
-      message =
-        `Hi ${agent.full_name || "Agent"}, kamu ditugaskan oleh ${assignerName} untuk menjawab lead di Inbox CRM Husada.\n\n` +
-        `Nama Lead   : ${c.full_name || "—"}\n` +
-        `WhatsApp    : ${c.whatsapp_number || "—"}\n` +
-        `Produk      : ${productName}\n` +
-        `Keluhan     : ${c.chief_complaint || "—"}\n\n` +
-        `Mohon segera ditindaklanjuti.`;
+      if (mode === "invitation") {
+        message =
+          `Hi ${agent.full_name || "Agent"}, kamu dapet *INVITATION* penugasan lead dari *${assignerName}* (First Response) di CRM Husada.\n\n` +
+          `Nama Lead   : ${c.full_name || "—"}\n` +
+          `WhatsApp    : ${c.whatsapp_number || "—"}\n` +
+          `Produk      : ${productName}\n` +
+          `Keluhan     : ${c.chief_complaint || "—"}\n\n` +
+          `Kamu diundang untuk mengambil alih lead ini. Mohon cek dulu apakah data & isi chat sudah sesuai — bisa TERIMA untuk ambil alih, atau TOLAK jika belum layak follow-up (lead akan balik ke First Response).\n\n` +
+          `Buka: /invitation/${invitation_id || ""}`;
+      } else {
+        message =
+          `Hi ${agent.full_name || "Agent"}, kamu ditugaskan oleh ${assignerName} untuk menjawab lead di Inbox CRM Husada.\n\n` +
+          `Nama Lead   : ${c.full_name || "—"}\n` +
+          `WhatsApp    : ${c.whatsapp_number || "—"}\n` +
+          `Produk      : ${productName}\n` +
+          `Keluhan     : ${c.chief_complaint || "—"}\n\n` +
+          `Mohon segera ditindaklanjuti.`;
+      }
     }
 
     let phone = String(agent.phone).replace(/\D/g, "");
