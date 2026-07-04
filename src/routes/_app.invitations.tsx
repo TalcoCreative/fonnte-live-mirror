@@ -10,7 +10,7 @@ import { id as idLocale } from "date-fns/locale";
 import { MessageSquare, Inbox as InboxIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_app/invitations")({
-  head: () => ({ meta: [{ title: "Undangan Penugasan — Husada CRM" }] }),
+  head: () => ({ meta: [{ title: "Invitation — Husada CRM" }] }),
   component: InvitationsListPage,
 });
 
@@ -54,9 +54,9 @@ function InvitationsListPage() {
     <div className="max-w-5xl mx-auto p-3 md:p-6 space-y-4">
       <header>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <MessageSquare className="size-6 text-primary" /> Undangan Penugasan
+          <MessageSquare className="size-6 text-primary" /> Invitation
         </h1>
-        <p className="text-sm text-muted-foreground">Undangan chat dari First Response yang harus Anda terima/tolak.</p>
+        <p className="text-sm text-muted-foreground">Invitation chat dari First Response yang harus Anda terima/tolak.</p>
       </header>
       <div className="flex gap-1.5 p-1.5 rounded-2xl bg-card border">
         {(["incoming", "outgoing"] as const).map((t) => (
@@ -70,7 +70,7 @@ function InvitationsListPage() {
       {rows.length === 0 ? (
         <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
           <InboxIcon className="size-8 mx-auto mb-2 opacity-40" />
-          Belum ada undangan.
+          Belum ada invitation.
         </CardContent></Card>
       ) : (
         <div className="space-y-2">

@@ -20,7 +20,7 @@ const ALL_NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, crucial: false, roles: ["super_admin", "admin", "agent"] },
   { to: "/inbox", label: "Inbox", icon: MessageSquare, crucial: true },
   { to: "/my-inbox", label: "My Inbox", icon: Inbox, crucial: false },
-  { to: "/invitations", label: "Undangan", icon: Mail, crucial: false, badgeKey: "invitations" },
+  { to: "/invitations", label: "Invitation", icon: Mail, crucial: false, badgeKey: "invitations" },
   { to: "/leads", label: "Leads", icon: Users, crucial: true, roles: ["super_admin", "admin", "agent"] },
   { to: "/my-leads", label: "My Leads", icon: UserCircle2, crucial: false, roles: ["super_admin", "admin", "agent"] },
   { to: "/broadcast", label: "Broadcast", icon: Send, crucial: false, roles: ["super_admin", "admin", "agent"] },

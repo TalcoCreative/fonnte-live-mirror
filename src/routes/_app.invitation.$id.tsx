@@ -11,7 +11,7 @@ import { Loader2, CheckCircle2, XCircle, MessageSquare, ArrowLeft, User as UserI
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/invitation/$id")({
-  head: () => ({ meta: [{ title: "Undangan Penugasan — Husada CRM" }] }),
+  head: () => ({ meta: [{ title: "Invitation — Husada CRM" }] }),
   component: InvitationPage,
 });
 
@@ -32,12 +32,13 @@ function InvitationPage() {
   async function load() {
     setLoading(true);
     const { data: invRow, error } = await supabase.from("assignment_invitations").select("*").eq("id", id).maybeSingle();
-    if (error || !invRow) { toast.error("Undangan tidak ditemukan"); router.navigate({ to: "/inbox" }); return; }
+    if (error || !invRow) { toast.error("Invitation tidak ditemukan"); router.navigate({ to: "/inbox" }); return; }
     setInv(invRow);
+    const snapshotAt = (invRow as any).snapshot_at || invRow.created_at;
     const [{ data: c }, { data: conv }, { data: msgs }, { data: fromProf }, { data: st }] = await Promise.all([
       supabase.from("contacts").select("*").eq("id", invRow.contact_id).maybeSingle(),
       supabase.from("conversations").select("*").eq("id", invRow.conversation_id).maybeSingle(),
-      supabase.from("messages").select("*").eq("conversation_id", invRow.conversation_id).order("sent_at", { ascending: true }),
+      supabase.from("messages").select("*").eq("conversation_id", invRow.conversation_id).lte("sent_at", snapshotAt).order("sent_at", { ascending: true }),
       supabase.from("profiles").select("full_name,email").eq("id", invRow.from_user_id).maybeSingle(),
       invRow.previous_stage_id
         ? supabase.from("stages").select("name,color").eq("id", invRow.previous_stage_id).maybeSingle()
@@ -99,7 +100,7 @@ function InvitationPage() {
       entity_type: "conversation", entity_id: inv.conversation_id,
       metadata: { invitation_id: inv.id, reason: rejectReason.trim(), returned_to: inv.from_user_id },
     } as any);
-    toast.success("Undangan ditolak. Lead dikembalikan ke First Response.");
+    toast.success("Invitation ditolak. Lead dikembalikan ke First Response.");
     setBusy(false);
     load();
   }
@@ -112,7 +113,7 @@ function InvitationPage() {
     }).eq("id", inv.id);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Undangan dibatalkan.");
+    toast.success("Invitation dibatalkan.");
     load();
   }
 
@@ -136,7 +137,7 @@ function InvitationPage() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <MessageSquare className="size-5 text-primary" />
-                Undangan Penugasan
+                Invitation Penugasan
               </CardTitle>
               <CardDescription className="mt-1">
                 Dari <b>{fromName}</b> untuk <b>{contact?.full_name || contact?.whatsapp_number}</b>
@@ -191,8 +192,8 @@ function InvitationPage() {
 
       <Card className="glow-soft">
         <CardHeader>
-          <CardTitle className="text-base">Riwayat Chat (read-only)</CardTitle>
-          <CardDescription>Baca dulu percakapannya sebelum menerima. Kalau chat belum layak follow-up, tolak dengan alasan.</CardDescription>
+          <CardTitle className="text-base">Riwayat Chat saat di-invite (read-only)</CardTitle>
+          <CardDescription>Hanya menampilkan chat sampai waktu invitation dikirim. Baca dulu sebelum menerima — kalau belum layak follow-up, tolak dengan alasan.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="max-h-[420px] overflow-auto space-y-2 bg-muted/30 rounded-lg p-3 border">
@@ -254,7 +255,7 @@ function InvitationPage() {
             <div className="text-sm text-muted-foreground flex items-center gap-2">
               <UserIcon className="size-4" /> Menunggu respon agent.
             </div>
-            <Button variant="outline" onClick={cancel} disabled={busy}>Batalkan Undangan</Button>
+            <Button variant="outline" onClick={cancel} disabled={busy}>Batalkan Invitation</Button>
           </CardContent>
         </Card>
       )}
@@ -262,7 +263,7 @@ function InvitationPage() {
       {inv.status !== "pending" && (
         <Card>
           <CardContent className="pt-6 text-sm text-muted-foreground">
-            Undangan sudah <b>{inv.status}</b> pada {inv.responded_at ? new Date(inv.responded_at).toLocaleString("id-ID") : "-"}.
+            Invitation sudah <b>{inv.status}</b> pada {inv.responded_at ? new Date(inv.responded_at).toLocaleString("id-ID") : "-"}.
           </CardContent>
         </Card>
       )}
