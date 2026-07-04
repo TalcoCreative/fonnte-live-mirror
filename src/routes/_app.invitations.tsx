@@ -10,7 +10,7 @@ import { id as idLocale } from "date-fns/locale";
 import { MessageSquare, Inbox as InboxIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_app/invitations")({
-  head: () => ({ meta: [{ title: "Undangan Penugasan — Husada CRM" }] }),
+  head: () => ({ meta: [{ title: "Invitation — Husada CRM" }] }),
   component: InvitationsListPage,
 });
 
