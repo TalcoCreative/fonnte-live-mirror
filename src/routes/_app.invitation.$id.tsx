@@ -192,8 +192,8 @@ function InvitationPage() {
 
       <Card className="glow-soft">
         <CardHeader>
-          <CardTitle className="text-base">Riwayat Chat (read-only)</CardTitle>
-          <CardDescription>Baca dulu percakapannya sebelum menerima. Kalau chat belum layak follow-up, tolak dengan alasan.</CardDescription>
+          <CardTitle className="text-base">Riwayat Chat saat di-invite (read-only)</CardTitle>
+          <CardDescription>Hanya menampilkan chat sampai waktu invitation dikirim. Baca dulu sebelum menerima — kalau belum layak follow-up, tolak dengan alasan.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="max-h-[420px] overflow-auto space-y-2 bg-muted/30 rounded-lg p-3 border">
