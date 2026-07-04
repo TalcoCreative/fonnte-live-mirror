@@ -70,7 +70,7 @@ function InvitationsListPage() {
       {rows.length === 0 ? (
         <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
           <InboxIcon className="size-8 mx-auto mb-2 opacity-40" />
-          Belum ada undangan.
+          Belum ada invitation.
         </CardContent></Card>
       ) : (
         <div className="space-y-2">
