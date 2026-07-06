@@ -171,22 +171,11 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [filterUnread, setFilterUnread] = useState(false);
   const [filterUnassigned, setFilterUnassigned] = useState(false);
 
-  // FR Agent: lock to "Leads Masuk" + "First Response" stages only
-  const allowedStageIds = useMemo(() => {
-    if (!isFirstResponse) return null;
-    return new Set(
-      stages.filter((s) => /leads masuk|first response/i.test(s.name)).map((s) => s.id),
-    );
-  }, [stages, isFirstResponse]);
-
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     let list = conversations.filter((c) => !q ||
       c.contact?.full_name?.toLowerCase().includes(q) ||
       c.contact?.whatsapp_number?.includes(q));
-    if (allowedStageIds) {
-      list = list.filter((c) => c.contact?.stage_id && allowedStageIds.has(c.contact.stage_id));
-    }
     if (filterUnread) list = list.filter((c) => (c.unread_count || 0) > 0);
     if (filterUnassigned) list = list.filter((c) => !c.assigned_agent_id);
     const ts = (c: Conversation) => c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
@@ -201,7 +190,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       }
     });
     return list;
-  }, [conversations, search, allowedStageIds, filterUnread, filterUnassigned, sortBy]);
+  }, [conversations, search, filterUnread, filterUnassigned, sortBy]);
 
   // SLA badge color based on minutes since last inbound when unread
   function slaTone(c: Conversation): "ok" | "warn" | "danger" | null {
