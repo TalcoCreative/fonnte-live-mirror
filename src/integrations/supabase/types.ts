@@ -616,6 +616,7 @@ export type Database = {
           is_terminal: boolean
           name: string
           order_index: number
+          owner_role: Database["public"]["Enums"]["app_role"]
         }
         Insert: {
           color?: string
@@ -625,6 +626,7 @@ export type Database = {
           is_terminal?: boolean
           name: string
           order_index?: number
+          owner_role?: Database["public"]["Enums"]["app_role"]
         }
         Update: {
           color?: string
@@ -634,6 +636,7 @@ export type Database = {
           is_terminal?: boolean
           name?: string
           order_index?: number
+          owner_role?: Database["public"]["Enums"]["app_role"]
         }
         Relationships: []
       }
