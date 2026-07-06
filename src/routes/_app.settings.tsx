@@ -847,15 +847,6 @@ function WorkflowTab() {
                 <Badge variant="outline" className="text-xs">{counts[s.id] || 0} lead</Badge>
                 {s.is_default && <Badge className="bg-blue-500/15 text-blue-500 text-xs">Default</Badge>}
                 {s.is_terminal && <Badge className="bg-emerald-500/15 text-emerald-500 text-xs">Terminal</Badge>}
-                <select
-                  value={s.owner_role || "agent"}
-                  onChange={(e) => { setStages(stages.map((x) => x.id === s.id ? { ...x, owner_role: e.target.value } : x)); update(s.id, { owner_role: e.target.value }); }}
-                  className="h-9 rounded-md border bg-background text-xs px-2"
-                  title="Divisi pemilik stage ini"
-                >
-                  <option value="first_response">Divisi: First Response</option>
-                  <option value="agent">Divisi: Agent</option>
-                </select>
                 <div className="flex gap-1 ml-auto">
                   <Button size="sm" variant="ghost" disabled={i === 0} onClick={() => move(s.id, -1)}>↑</Button>
                   <Button size="sm" variant="ghost" disabled={i === stages.length - 1} onClick={() => move(s.id, 1)}>↓</Button>
