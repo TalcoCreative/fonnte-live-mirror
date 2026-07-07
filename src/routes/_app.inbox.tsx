@@ -481,6 +481,28 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                 Belum assign
               </button>
             </div>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <Select value={filterStageId} onValueChange={setFilterStageId}>
+                <SelectTrigger className="h-7 text-[11px] flex-1 min-w-[120px]"><SelectValue placeholder="Stage" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Semua stage</SelectItem>
+                  <SelectItem value="__none__">Tanpa stage</SelectItem>
+                  {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterAgentId} onValueChange={setFilterAgentId}>
+                <SelectTrigger className="h-7 text-[11px] flex-1 min-w-[120px]"><SelectValue placeholder="Agent" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Semua agent</SelectItem>
+                  <SelectItem value="__none__">Belum ditugaskan</SelectItem>
+                  {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name || a.email}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {(filterStageId !== "__all__" || filterAgentId !== "__all__") && (
+                <button onClick={() => { setFilterStageId("__all__"); setFilterAgentId("__all__"); }}
+                  className="text-[10px] px-2 py-1 rounded-md border hover:bg-accent">Reset</button>
+              )}
+            </div>
             <div className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
               <span className="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Live · {filtered.length}/{conversations.length} percakapan
