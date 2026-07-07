@@ -638,6 +638,10 @@ function TeamTab() {
                     toast.success("Perubahan disimpan");
                     load();
                   }}
+                  onResetPassword={async (password) => {
+                    await callManageAgent({ action: "reset_password", user_id: r.id, password });
+                    toast.success("Password berhasil diganti");
+                  }}
                   onDelete={() => deleteAgent(r.id, r.full_name || r.email)}
                 />
               ))}
@@ -650,13 +654,26 @@ function TeamTab() {
   );
 }
 
-function AgentRow({ r, me, busy, onSave, onDelete }: { r: any; me: string | null; busy: boolean; onSave: (patch: any) => Promise<void>; onDelete: () => void }) {
+function AgentRow({ r, me, busy, onSave, onResetPassword, onDelete }: {
+  r: any; me: string | null; busy: boolean;
+  onSave: (patch: any) => Promise<void>;
+  onResetPassword: (password: string) => Promise<void>;
+  onDelete: () => void;
+}) {
   const [fullName, setFullName] = useState(r.full_name || "");
   const [position, setPosition] = useState(r.position || "");
   const [phone, setPhone] = useState(r.phone || "");
+  const [role, setRole] = useState<string>((r.roles && r.roles[0]) || "agent");
+  const [newPassword, setNewPassword] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
   const [saving, setSaving] = useState(false);
-  useEffect(() => { setFullName(r.full_name || ""); setPosition(r.position || ""); setPhone(r.phone || ""); }, [r.id, r.full_name, r.position, r.phone]);
-  const dirty = fullName !== (r.full_name || "") || position !== (r.position || "") || phone !== (r.phone || "");
+  const [resetting, setResetting] = useState(false);
+  useEffect(() => {
+    setFullName(r.full_name || ""); setPosition(r.position || ""); setPhone(r.phone || "");
+    setRole((r.roles && r.roles[0]) || "agent");
+  }, [r.id, r.full_name, r.position, r.phone, JSON.stringify(r.roles)]);
+  const currentRole = (r.roles && r.roles[0]) || "agent";
+  const dirty = fullName !== (r.full_name || "") || position !== (r.position || "") || phone !== (r.phone || "") || role !== currentRole;
 
   async function save() {
     setSaving(true);
@@ -665,9 +682,21 @@ function AgentRow({ r, me, busy, onSave, onDelete }: { r: any; me: string | null
       if (fullName !== (r.full_name || "")) patch.full_name = fullName;
       if (position !== (r.position || "")) patch.position = position;
       if (phone !== (r.phone || "")) patch.phone = phone;
+      if (role !== currentRole) patch.role = role;
       await onSave(patch);
     } catch (e: any) { toast.error(e.message); }
     finally { setSaving(false); }
+  }
+
+  async function resetPwd() {
+    if (newPassword.length < 6) { toast.error("Password minimal 6 karakter"); return; }
+    if (!confirm(`Ganti password untuk ${fullName || r.email}?`)) return;
+    setResetting(true);
+    try {
+      await onResetPassword(newPassword);
+      setNewPassword(""); setShowPwd(false);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setResetting(false); }
   }
 
   return (
@@ -682,6 +711,9 @@ function AgentRow({ r, me, busy, onSave, onDelete }: { r: any; me: string | null
         </div>
         <div className="flex items-center gap-2">
           <TestNotifyButton agent={{ ...r, full_name: fullName, phone }} />
+          <Button size="sm" variant="outline" onClick={() => setShowPwd((v) => !v)}>
+            {showPwd ? "Batal" : "Ganti Password"}
+          </Button>
           <Button size="sm" onClick={save} disabled={!dirty || saving}>
             {saving && <Loader2 className="size-3.5 mr-1 animate-spin" />} Simpan
           </Button>
@@ -691,7 +723,7 @@ function AgentRow({ r, me, busy, onSave, onDelete }: { r: any; me: string | null
           </Button>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
         <div className="space-y-1">
           <Label className="text-[11px] text-muted-foreground">Nama</Label>
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nama lengkap" className="h-9 text-sm" />
@@ -704,7 +736,30 @@ function AgentRow({ r, me, busy, onSave, onDelete }: { r: any; me: string | null
           <Label className="text-[11px] text-muted-foreground">No. WhatsApp</Label>
           <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="628..." className="h-9 text-sm" />
         </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Role</Label>
+          <select value={role} onChange={(e) => setRole(e.target.value)}
+            disabled={r.id === me}
+            className="h-9 w-full rounded-md border bg-background px-2 text-sm">
+            <option value="agent">Agent</option>
+            <option value="first_response">First Response</option>
+            <option value="admin">Admin</option>
+            <option value="super_admin">Super Admin</option>
+          </select>
+        </div>
       </div>
+      {showPwd && (
+        <div className="flex items-end gap-2 pt-1 border-t mt-2">
+          <div className="flex-1 space-y-1">
+            <Label className="text-[11px] text-muted-foreground">Password Baru (min 6 karakter)</Label>
+            <Input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Password baru untuk agent ini" className="h-9 text-sm" />
+          </div>
+          <Button size="sm" onClick={resetPwd} disabled={resetting || newPassword.length < 6}>
+            {resetting && <Loader2 className="size-3.5 mr-1 animate-spin" />} Simpan Password
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

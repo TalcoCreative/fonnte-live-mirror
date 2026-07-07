@@ -691,17 +691,26 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
         (agentShiftMap[a.agent_id] = agentShiftMap[a.agent_id] || []).push({ shift: s, effective_from: a.effective_from });
       });
 
-      // Return true if timestamp ms is inside any active shift window for this agent
+      // Untuk agent non-FR: jam kerja tetap Senin-Jumat 08:00-17:00.
+      // Untuk FR: pakai shift terjadwal dari tabel shifts + agent_shifts (custom mingguan).
       const anyShiftConfigured = Object.keys(agentShiftMap).length > 0;
       function inShift(agentId: string, ts: number): boolean {
-        // If no shifts configured anywhere → don't filter (backward compat)
-        if (!anyShiftConfigured) return true;
-        const shifts = agentShiftMap[agentId];
-        if (!shifts || !shifts.length) return false; // agent tanpa shift → tidak dihitung
         const d = new Date(ts);
-        const dayKey = d.toISOString().slice(0, 10);
         const dow = d.getDay();
         const mins = d.getHours() * 60 + d.getMinutes();
+        const isFR = frUserIds.has(agentId);
+
+        if (!isFR) {
+          // Fixed benchmark: Mon-Fri 08:00-17:00
+          if (dow < 1 || dow > 5) return false;
+          return mins >= 8 * 60 && mins < 17 * 60;
+        }
+
+        // FR: use scheduled shifts
+        if (!anyShiftConfigured) return true;
+        const shifts = agentShiftMap[agentId];
+        if (!shifts || !shifts.length) return false;
+        const dayKey = d.toISOString().slice(0, 10);
         for (const { shift, effective_from } of shifts) {
           if (effective_from && effective_from > dayKey) continue;
           const days: number[] = shift.days_of_week || [];
@@ -713,12 +722,12 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
           if (sMin <= eMin) {
             if (mins >= sMin && mins < eMin) return true;
           } else {
-            // wrap midnight
             if (mins >= sMin || mins < eMin) return true;
           }
         }
         return false;
       }
+
 
       const nameById: Record<string, string> = {};
       profiles.forEach((p) => { nameById[p.id] = p.full_name || p.email || "Agent"; });

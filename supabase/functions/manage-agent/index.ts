@@ -87,6 +87,18 @@ Deno.serve(async (req) => {
       return j({ ok: true });
     }
 
+    if (action === "reset_password") {
+      const target = String(body.user_id || "");
+      const password = String(body.password || "");
+      if (!target || password.length < 6) return j({ error: "user_id & password (min 6) wajib" }, 400);
+      const { error } = await admin.auth.admin.updateUserById(target, { password });
+      if (error) return j({ error: error.message }, 400);
+      await admin.from("activity_logs").insert({
+        user_id: u.user.id, action: "reset_password", entity_type: "profile", entity_id: target,
+      });
+      return j({ ok: true });
+    }
+
     if (action === "update") {
       const target = String(body.user_id || "");
       if (!target) return j({ error: "user_id wajib" }, 400);
