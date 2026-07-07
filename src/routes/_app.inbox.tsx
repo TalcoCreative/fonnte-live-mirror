@@ -432,6 +432,23 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     loadConversations();
   }
 
+  async function saveDomicile(next: string) {
+    if (!active?.contact_id) return;
+    const newVal = next.trim() || null;
+    const oldVal = active.contact?.domicile || null;
+    if (newVal === oldVal) return;
+    const { error } = await supabase.from("contacts").update({ domicile: newVal }).eq("id", active.contact_id);
+    if (error) { toast.error(error.message); return; }
+    await logAction("update_domicile", {
+      contact_id: active.contact_id,
+      whatsapp: active.contact?.whatsapp_number,
+      contact_name: active.contact?.full_name,
+      from_domicile: oldVal, to_domicile: newVal,
+    });
+    toast.success("Domisili diperbarui");
+    loadConversations();
+  }
+
   async function deleteConversation() {
     if (!active) return;
     // Delete conversation (cascade removes messages). Reset chatbot_state so the next inbound restarts the bot — but keep the lead (contact) so name/phone/keluhan get UPDATED in place on the next round.
