@@ -718,13 +718,8 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                         <Input
                           value={nameDraft}
                           onChange={(e) => setNameDraft(e.target.value)}
-                          onBlur={() => { if ((nameDraft.trim()) && nameDraft.trim() !== (active.contact?.full_name || "")) { setEditingName(false); (async () => {
-                            const { error } = await supabase.from("contacts").update({ full_name: nameDraft.trim() }).eq("id", active.contact_id);
-                            if (error) return toast.error(error.message);
-                            await logAction("rename_contact", { contact_id: active.contact_id, whatsapp: active.contact?.whatsapp_number, from_name: active.contact?.full_name || "", to_name: nameDraft.trim(), contact_name: nameDraft.trim() });
-                            toast.success("Nama lead diperbarui");
-                            loadConversations();
-                          })(); } }}
+                          onBlur={saveName}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
                           placeholder="Nama lengkap lead"
                           className="h-9 text-xs"
                         />
@@ -737,6 +732,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                           value={domicileDraft}
                           onChange={(e) => setDomicileDraft(e.target.value)}
                           onBlur={() => saveDomicile(domicileDraft)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
                           placeholder="cth: Jakarta Selatan"
                           className="h-9 text-xs"
                         />
