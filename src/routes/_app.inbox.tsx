@@ -337,10 +337,21 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
         to_agent: agentId, to_name: agentName(agentId),
         invitation_id: inv?.id,
       });
-      supabase.functions.invoke("notify-agent-assign", {
-        body: { conversation_id: activeId, agent_id: agentId, invitation_id: inv?.id, mode: "invitation" },
-      }).catch(() => {});
-      toast.success(`Invitation dikirim ke ${agentName(agentId)}. Menunggu diterima.`);
+      // Kirim notifikasi WA ke agent yang diundang — await agar status pengiriman
+      // bisa dipertegas ke pengirim (kalau gagal, invitation tetap ada di /invitations).
+      try {
+        const { data: notifRes, error: notifErr } = await supabase.functions.invoke("notify-agent-assign", {
+          body: { conversation_id: activeId, agent_id: agentId, invitation_id: inv?.id, mode: "invitation" },
+        });
+        if (notifErr) throw notifErr;
+        if (notifRes?.ok) {
+          toast.success(`Invitation dikirim ke ${agentName(agentId)} + notifikasi WhatsApp terkirim.`);
+        } else {
+          toast.warning(`Invitation dibuat, tapi WhatsApp tidak terkirim (${notifRes?.skipped || "cek nomor / Fonnte"}).`);
+        }
+      } catch (e: any) {
+        toast.warning(`Invitation dibuat, tapi notifikasi WA gagal: ${e?.message || e}`);
+      }
       return;
     }
 
