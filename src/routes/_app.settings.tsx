@@ -34,7 +34,6 @@ function SettingsPage() {
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
     { v: "shifts", label: "Shift & Jadwal" },
-    { v: "ops", label: "SLA Inbox" },
     { v: "webhook", label: "Webhook" },
   ];
   return (
