@@ -709,7 +709,38 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                         <MoreVertical className="size-4" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-72 p-3 space-y-3" align="end">
+                    <PopoverContent className="w-72 p-3 space-y-3" align="end"
+                      onOpenAutoFocus={() => { setNameDraft(active.contact?.full_name || ""); setDomicileDraft(active.contact?.domicile || ""); }}>
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                          <UserIcon className="size-3" /> Nama lead
+                        </div>
+                        <Input
+                          value={nameDraft}
+                          onChange={(e) => setNameDraft(e.target.value)}
+                          onBlur={() => { if ((nameDraft.trim()) && nameDraft.trim() !== (active.contact?.full_name || "")) { setEditingName(false); (async () => {
+                            const { error } = await supabase.from("contacts").update({ full_name: nameDraft.trim() }).eq("id", active.contact_id);
+                            if (error) return toast.error(error.message);
+                            await logAction("rename_contact", { contact_id: active.contact_id, whatsapp: active.contact?.whatsapp_number, from_name: active.contact?.full_name || "", to_name: nameDraft.trim(), contact_name: nameDraft.trim() });
+                            toast.success("Nama lead diperbarui");
+                            loadConversations();
+                          })(); } }}
+                          placeholder="Nama lengkap lead"
+                          className="h-9 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                          <UserIcon className="size-3" /> Domisili
+                        </div>
+                        <Input
+                          value={domicileDraft}
+                          onChange={(e) => setDomicileDraft(e.target.value)}
+                          onBlur={() => saveDomicile(domicileDraft)}
+                          placeholder="cth: Jakarta Selatan"
+                          className="h-9 text-xs"
+                        />
+                      </div>
                       <div className="space-y-1.5">
                         <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
                           <Tag className="size-3" /> Stage
