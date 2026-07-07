@@ -61,11 +61,10 @@ Deno.serve(async (req) => {
       const uid = created.user.id;
       await admin.from("profiles").upsert({ id: uid, email, full_name, position, phone }, { onConflict: "id" });
 
-      // Handle role: replace default 'agent' role if a different one was requested
-      if (role && role !== "agent") {
-        await admin.from("user_roles").delete().eq("user_id", uid);
-        await admin.from("user_roles").insert({ user_id: uid, role });
-      }
+      // Always persist the selected role. Some environments don't run the auth trigger
+      // that used to add the default agent role, so relying on it leaves accounts unrestricted.
+      await admin.from("user_roles").delete().eq("user_id", uid);
+      await admin.from("user_roles").insert({ user_id: uid, role });
 
       await admin.from("activity_logs").insert({
         user_id: u.user.id, action: "create_agent", entity_type: "profile", entity_id: uid,
