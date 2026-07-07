@@ -938,7 +938,13 @@ function ShiftsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Buat Shift Baru</CardTitle>
-          <CardDescription>Definisikan window jam kerja. Metrik First Response di dashboard dihitung <b>hanya di dalam jam shift</b> agent.</CardDescription>
+          <CardDescription>
+            Definisikan window jam kerja. Metrik First Response di dashboard dihitung <b>hanya di dalam jam shift</b> agent.
+            <br />
+            <span className="text-primary">Tips:</span> untuk agent dengan jam berbeda tiap hari (mis. Senin pagi, Selasa siang, Rabu sore),
+            buat beberapa shift terpisah — mis. <b>Senin Pagi (08–12, hari: Sen)</b>, <b>Selasa Siang (12–17, hari: Sel)</b>, <b>Rabu Sore (16–21, hari: Rab)</b>,
+            lalu centang agent yang sama di ketiga shift tsb. Shift juga bisa dipindah sewaktu-waktu tanpa menghapus history.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
