@@ -63,6 +63,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [mode, setMode] = useState<ComposeMode>("reply");
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [domicileDraft, setDomicileDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
@@ -431,6 +432,23 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
     loadConversations();
   }
 
+  async function saveDomicile(next: string) {
+    if (!active?.contact_id) return;
+    const newVal = next.trim() || null;
+    const oldVal = active.contact?.domicile || null;
+    if (newVal === oldVal) return;
+    const { error } = await supabase.from("contacts").update({ domicile: newVal }).eq("id", active.contact_id);
+    if (error) { toast.error(error.message); return; }
+    await logAction("update_domicile", {
+      contact_id: active.contact_id,
+      whatsapp: active.contact?.whatsapp_number,
+      contact_name: active.contact?.full_name,
+      from_domicile: oldVal, to_domicile: newVal,
+    });
+    toast.success("Domisili diperbarui");
+    loadConversations();
+  }
+
   async function deleteConversation() {
     if (!active) return;
     // Delete conversation (cascade removes messages). Reset chatbot_state so the next inbound restarts the bot — but keep the lead (contact) so name/phone/keluhan get UPDATED in place on the next round.
@@ -691,7 +709,34 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                         <MoreVertical className="size-4" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-72 p-3 space-y-3" align="end">
+                    <PopoverContent className="w-72 p-3 space-y-3" align="end"
+                      onOpenAutoFocus={() => { setNameDraft(active.contact?.full_name || ""); setDomicileDraft(active.contact?.domicile || ""); }}>
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                          <UserIcon className="size-3" /> Nama lead
+                        </div>
+                        <Input
+                          value={nameDraft}
+                          onChange={(e) => setNameDraft(e.target.value)}
+                          onBlur={saveName}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+                          placeholder="Nama lengkap lead"
+                          className="h-9 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
+                          <UserIcon className="size-3" /> Domisili
+                        </div>
+                        <Input
+                          value={domicileDraft}
+                          onChange={(e) => setDomicileDraft(e.target.value)}
+                          onBlur={() => saveDomicile(domicileDraft)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+                          placeholder="cth: Jakarta Selatan"
+                          className="h-9 text-xs"
+                        />
+                      </div>
                       <div className="space-y-1.5">
                         <div className="text-[11px] font-medium text-muted-foreground flex items-center gap-1.5">
                           <Tag className="size-3" /> Stage
