@@ -969,8 +969,16 @@ function ShiftsTab() {
             </div>
           </div>
           <div className="mt-3">
-            <Label className="text-xs text-muted-foreground">Hari aktif</Label>
-            <div className="flex gap-1 flex-wrap mt-1">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <Label className="text-xs text-muted-foreground">Hari aktif</Label>
+              <div className="flex gap-1 flex-wrap">
+                <button type="button" onClick={() => setDays([1,2,3,4,5])} className="text-[10px] px-2 py-0.5 rounded border hover:bg-accent">Sen–Jum</button>
+                <button type="button" onClick={() => setDays([0,6])} className="text-[10px] px-2 py-0.5 rounded border hover:bg-accent">Weekend</button>
+                <button type="button" onClick={() => setDays([0,1,2,3,4,5,6])} className="text-[10px] px-2 py-0.5 rounded border hover:bg-accent">Setiap hari</button>
+                <button type="button" onClick={() => setDays([])} className="text-[10px] px-2 py-0.5 rounded border hover:bg-accent">Kosongkan</button>
+              </div>
+            </div>
+            <div className="flex gap-1 flex-wrap mt-1.5">
               {DAY_LABELS.map((d, i) => {
                 const on = days.includes(i);
                 return (
@@ -981,6 +989,7 @@ function ShiftsTab() {
                 );
               })}
             </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">Untuk 1 shift 1 hari saja, kosongkan lalu pilih 1 hari — mis. "Selasa Siang".</p>
           </div>
         </CardContent>
       </Card>
