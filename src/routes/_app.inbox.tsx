@@ -170,6 +170,8 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [sortBy, setSortBy] = useState<"recent" | "oldest" | "unread" | "name_asc" | "name_desc">("recent");
   const [filterUnread, setFilterUnread] = useState(false);
   const [filterUnassigned, setFilterUnassigned] = useState(false);
+  const [filterStageId, setFilterStageId] = useState<string>("__all__");
+  const [filterAgentId, setFilterAgentId] = useState<string>("__all__");
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -178,6 +180,12 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       c.contact?.whatsapp_number?.includes(q));
     if (filterUnread) list = list.filter((c) => (c.unread_count || 0) > 0);
     if (filterUnassigned) list = list.filter((c) => !c.assigned_agent_id);
+    if (filterStageId !== "__all__") {
+      list = list.filter((c) => (c.contact?.stage_id || "__none__") === filterStageId);
+    }
+    if (filterAgentId !== "__all__") {
+      list = list.filter((c) => (c.assigned_agent_id || "__none__") === filterAgentId);
+    }
     const ts = (c: Conversation) => c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
     const nm = (c: Conversation) => (c.contact?.full_name || c.contact?.whatsapp_number || "").toLowerCase();
     list = [...list].sort((a, b) => {
@@ -190,7 +198,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       }
     });
     return list;
-  }, [conversations, search, filterUnread, filterUnassigned, sortBy]);
+  }, [conversations, search, filterUnread, filterUnassigned, filterStageId, filterAgentId, sortBy]);
 
   // SLA badge color based on minutes since last inbound when unread
   function slaTone(c: Conversation): "ok" | "warn" | "danger" | null {
@@ -329,10 +337,21 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
         to_agent: agentId, to_name: agentName(agentId),
         invitation_id: inv?.id,
       });
-      supabase.functions.invoke("notify-agent-assign", {
-        body: { conversation_id: activeId, agent_id: agentId, invitation_id: inv?.id, mode: "invitation" },
-      }).catch(() => {});
-      toast.success(`Invitation dikirim ke ${agentName(agentId)}. Menunggu diterima.`);
+      // Kirim notifikasi WA ke agent yang diundang — await agar status pengiriman
+      // bisa dipertegas ke pengirim (kalau gagal, invitation tetap ada di /invitations).
+      try {
+        const { data: notifRes, error: notifErr } = await supabase.functions.invoke("notify-agent-assign", {
+          body: { conversation_id: activeId, agent_id: agentId, invitation_id: inv?.id, mode: "invitation" },
+        });
+        if (notifErr) throw notifErr;
+        if (notifRes?.ok) {
+          toast.success(`Invitation dikirim ke ${agentName(agentId)} + notifikasi WhatsApp terkirim.`);
+        } else {
+          toast.warning(`Invitation dibuat, tapi WhatsApp tidak terkirim (${notifRes?.skipped || "cek nomor / Fonnte"}).`);
+        }
+      } catch (e: any) {
+        toast.warning(`Invitation dibuat, tapi notifikasi WA gagal: ${e?.message || e}`);
+      }
       return;
     }
 
@@ -472,6 +491,28 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
                   filterUnassigned ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent")}>
                 Belum assign
               </button>
+            </div>
+            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+              <Select value={filterStageId} onValueChange={setFilterStageId}>
+                <SelectTrigger className="h-7 text-[11px] flex-1 min-w-[120px]"><SelectValue placeholder="Stage" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Semua stage</SelectItem>
+                  <SelectItem value="__none__">Tanpa stage</SelectItem>
+                  {stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterAgentId} onValueChange={setFilterAgentId}>
+                <SelectTrigger className="h-7 text-[11px] flex-1 min-w-[120px]"><SelectValue placeholder="Agent" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">Semua agent</SelectItem>
+                  <SelectItem value="__none__">Belum ditugaskan</SelectItem>
+                  {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.full_name || a.email}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {(filterStageId !== "__all__" || filterAgentId !== "__all__") && (
+                <button onClick={() => { setFilterStageId("__all__"); setFilterAgentId("__all__"); }}
+                  className="text-[10px] px-2 py-1 rounded-md border hover:bg-accent">Reset</button>
+              )}
             </div>
             <div className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
               <span className="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse" />

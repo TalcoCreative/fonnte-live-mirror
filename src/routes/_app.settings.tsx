@@ -34,7 +34,6 @@ function SettingsPage() {
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
     { v: "shifts", label: "Shift & Jadwal" },
-    { v: "ops", label: "SLA Inbox" },
     { v: "webhook", label: "Webhook" },
   ];
   return (
@@ -64,7 +63,6 @@ function SettingsPage() {
         {tab === "products" && <ProductsTab />}
         {tab === "team" && <TeamTab />}
         {tab === "shifts" && <ShiftsTab />}
-        {tab === "ops" && <OpsTab />}
         {tab === "webhook" && <WebhookTab />}
       </div>
 
@@ -696,63 +694,6 @@ function AgentRow({ r, me, busy, onSave, onDelete }: { r: any; me: string | null
 }
 
 
-function OpsTab() {
-  const [slaGreen, setSlaGreen] = useState("5");
-  const [slaYellow, setSlaYellow] = useState("10");
-  const [busy, setBusy] = useState(false);
-
-  async function loadAll() {
-    const [{ data: sg }, { data: sy }] = await Promise.all([
-      supabase.from("system_settings").select("value").eq("key", "sla_green_minutes").maybeSingle(),
-      supabase.from("system_settings").select("value").eq("key", "sla_yellow_minutes").maybeSingle(),
-    ]);
-    if (sg?.value) setSlaGreen(String(sg.value).replace(/"/g, ""));
-    if (sy?.value) setSlaYellow(String(sy.value).replace(/"/g, ""));
-  }
-  useEffect(() => { loadAll(); }, []);
-
-  async function saveSla() {
-    const g = parseInt(slaGreen, 10);
-    const y = parseInt(slaYellow, 10);
-    if (!Number.isFinite(g) || !Number.isFinite(y) || g <= 0 || y <= g) {
-      return toast.error("SLA tidak valid. Kuning harus > Hijau.");
-    }
-    setBusy(true);
-    const { error } = await supabase.from("system_settings").upsert([
-      { key: "sla_green_minutes", value: String(g) },
-      { key: "sla_yellow_minutes", value: String(y) },
-    ], { onConflict: "key" });
-    setBusy(false);
-    if (error) toast.error(error.message); else toast.success("Ambang SLA disimpan");
-  }
-
-  return (
-    <div className="space-y-4 mt-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Ambang SLA Inbox</CardTitle>
-          <CardDescription>
-            Indikator warna untuk percakapan belum dibaca: <span className="text-emerald-600 font-medium">Hijau</span> kurang dari ambang,
-            {" "}<span className="text-amber-600 font-medium">Kuning</span> di antara ambang, <span className="text-rose-600 font-medium">Merah</span> melewati ambang kuning.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-          <div className="space-y-1.5">
-            <Label>Hijau &lt; (menit)</Label>
-            <Input type="number" min={1} value={slaGreen} onChange={(e) => setSlaGreen(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Kuning &lt; (menit)</Label>
-            <Input type="number" min={2} value={slaYellow} onChange={(e) => setSlaYellow(e.target.value)} />
-          </div>
-          <Button onClick={saveSla} disabled={busy}>
-            {busy && <Loader2 className="size-4 mr-2 animate-spin" />}Simpan SLA
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 
 function WorkflowTab() {
@@ -997,7 +938,13 @@ function ShiftsTab() {
       <Card>
         <CardHeader>
           <CardTitle>Buat Shift Baru</CardTitle>
-          <CardDescription>Definisikan window jam kerja. Metrik First Response di dashboard dihitung <b>hanya di dalam jam shift</b> agent.</CardDescription>
+          <CardDescription>
+            Definisikan window jam kerja. Metrik First Response di dashboard dihitung <b>hanya di dalam jam shift</b> agent.
+            <br />
+            <span className="text-primary">Tips:</span> untuk agent dengan jam berbeda tiap hari (mis. Senin pagi, Selasa siang, Rabu sore),
+            buat beberapa shift terpisah — mis. <b>Senin Pagi (08–12, hari: Sen)</b>, <b>Selasa Siang (12–17, hari: Sel)</b>, <b>Rabu Sore (16–21, hari: Rab)</b>,
+            lalu centang agent yang sama di ketiga shift tsb. Shift juga bisa dipindah sewaktu-waktu tanpa menghapus history.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
@@ -1022,8 +969,16 @@ function ShiftsTab() {
             </div>
           </div>
           <div className="mt-3">
-            <Label className="text-xs text-muted-foreground">Hari aktif</Label>
-            <div className="flex gap-1 flex-wrap mt-1">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <Label className="text-xs text-muted-foreground">Hari aktif</Label>
+              <div className="flex gap-1 flex-wrap">
+                <button type="button" onClick={() => setDays([1,2,3,4,5])} className="text-[10px] px-2 py-0.5 rounded border hover:bg-accent">Sen–Jum</button>
+                <button type="button" onClick={() => setDays([0,6])} className="text-[10px] px-2 py-0.5 rounded border hover:bg-accent">Weekend</button>
+                <button type="button" onClick={() => setDays([0,1,2,3,4,5,6])} className="text-[10px] px-2 py-0.5 rounded border hover:bg-accent">Setiap hari</button>
+                <button type="button" onClick={() => setDays([])} className="text-[10px] px-2 py-0.5 rounded border hover:bg-accent">Kosongkan</button>
+              </div>
+            </div>
+            <div className="flex gap-1 flex-wrap mt-1.5">
               {DAY_LABELS.map((d, i) => {
                 const on = days.includes(i);
                 return (
@@ -1034,6 +989,7 @@ function ShiftsTab() {
                 );
               })}
             </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">Untuk 1 shift 1 hari saja, kosongkan lalu pilih 1 hari — mis. "Selasa Siang".</p>
           </div>
         </CardContent>
       </Card>

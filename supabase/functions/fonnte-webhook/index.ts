@@ -112,9 +112,17 @@ Deno.serve(async (req) => {
       let source = "organik";
       if (!fromMe && message) {
         const { data: codes } = await admin.from("content_codes").select("id, code, product_id").eq("is_active", true);
-        const upperMsg = message.toUpperCase();
+        const upperMsg = String(message).toUpperCase();
+        // Detect code anywhere in the message (front, middle, or end) using
+        // word boundaries so codes surrounded by spaces, punctuation, or line
+        // breaks all match — but codes embedded inside a longer alphanumeric
+        // token don't produce false positives.
         for (const c of (codes || [])) {
-          if (c.code && upperMsg.includes(String(c.code).toUpperCase())) {
+          const raw = String(c.code || "").trim().toUpperCase();
+          if (!raw) continue;
+          const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const re = new RegExp(`(^|[^A-Z0-9])${escaped}([^A-Z0-9]|$)`);
+          if (re.test(upperMsg)) {
             contentCodeId = c.id;
             contentProductId = (c as any).product_id || null;
             source = "ads";
