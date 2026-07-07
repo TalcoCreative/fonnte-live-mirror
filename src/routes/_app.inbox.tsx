@@ -170,6 +170,8 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
   const [sortBy, setSortBy] = useState<"recent" | "oldest" | "unread" | "name_asc" | "name_desc">("recent");
   const [filterUnread, setFilterUnread] = useState(false);
   const [filterUnassigned, setFilterUnassigned] = useState(false);
+  const [filterStageId, setFilterStageId] = useState<string>("__all__");
+  const [filterAgentId, setFilterAgentId] = useState<string>("__all__");
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -178,6 +180,12 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       c.contact?.whatsapp_number?.includes(q));
     if (filterUnread) list = list.filter((c) => (c.unread_count || 0) > 0);
     if (filterUnassigned) list = list.filter((c) => !c.assigned_agent_id);
+    if (filterStageId !== "__all__") {
+      list = list.filter((c) => (c.contact?.stage_id || "__none__") === filterStageId);
+    }
+    if (filterAgentId !== "__all__") {
+      list = list.filter((c) => (c.assigned_agent_id || "__none__") === filterAgentId);
+    }
     const ts = (c: Conversation) => c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
     const nm = (c: Conversation) => (c.contact?.full_name || c.contact?.whatsapp_number || "").toLowerCase();
     list = [...list].sort((a, b) => {
@@ -190,7 +198,7 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
       }
     });
     return list;
-  }, [conversations, search, filterUnread, filterUnassigned, sortBy]);
+  }, [conversations, search, filterUnread, filterUnassigned, filterStageId, filterAgentId, sortBy]);
 
   // SLA badge color based on minutes since last inbound when unread
   function slaTone(c: Conversation): "ok" | "warn" | "danger" | null {
