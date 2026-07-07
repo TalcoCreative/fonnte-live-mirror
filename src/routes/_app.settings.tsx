@@ -429,6 +429,17 @@ function ProductsTab() {
     load();
   }
 
+  async function remove(id: string, name: string) {
+    if (!confirm(`Hapus produk "${name}"? Referensi produk ini pada kontak & kode konten akan dikosongkan.`)) return;
+    // Detach references first so FK tidak menolak
+    await supabase.from("contacts").update({ interested_product_id: null }).eq("interested_product_id", id);
+    await supabase.from("content_codes").update({ product_id: null }).eq("product_id", id);
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Produk dihapus");
+    load();
+  }
+
   return (
     <div className="mt-4 space-y-4">
       <Card>
