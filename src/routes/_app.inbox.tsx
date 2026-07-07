@@ -338,6 +338,10 @@ export function InboxView({ mineOnly }: { mineOnly: boolean }) {
 
     const { error } = await supabase.from("conversations").update({ assigned_agent_id: agentId }).eq("id", activeId);
     if (error) return toast.error(error.message);
+    // Sinkron contact.assigned_agent_id supaya RLS FR ikut lepas/ambil balik lead
+    if (active?.contact_id) {
+      await supabase.from("contacts").update({ assigned_agent_id: agentId }).eq("id", active.contact_id);
+    }
     await logAction("assign_agent", {
       contact_name: active?.contact?.full_name, whatsapp: active?.contact?.whatsapp_number,
       from_agent: prev, to_agent: agentId,
