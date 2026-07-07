@@ -429,6 +429,17 @@ function ProductsTab() {
     load();
   }
 
+  async function remove(id: string, name: string) {
+    if (!confirm(`Hapus produk "${name}"? Referensi produk ini pada kontak & kode konten akan dikosongkan.`)) return;
+    // Detach references first so FK tidak menolak
+    await supabase.from("contacts").update({ interested_product_id: null }).eq("interested_product_id", id);
+    await supabase.from("content_codes").update({ product_id: null }).eq("product_id", id);
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("Produk dihapus");
+    load();
+  }
+
   return (
     <div className="mt-4 space-y-4">
       <Card>
@@ -444,14 +455,19 @@ function ProductsTab() {
         <CardContent>
           <div className="space-y-2">
             {products.map((p) => (
-              <div key={p.id} className="flex items-center justify-between border-b py-2">
-                <div>
+              <div key={p.id} className="flex items-center justify-between border-b py-2 gap-2">
+                <div className="min-w-0">
                   <div className="font-medium">{p.name} {!p.is_active && <Badge variant="secondary">nonaktif</Badge>}</div>
                   <div className="text-xs text-muted-foreground">{p.description}</div>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => toggle(p.id, p.is_active)}>
-                  {p.is_active ? "Nonaktifkan" : "Aktifkan"}
-                </Button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="ghost" size="sm" onClick={() => toggle(p.id, p.is_active)}>
+                    {p.is_active ? "Nonaktifkan" : "Aktifkan"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => remove(p.id, p.name)}>
+                    Hapus
+                  </Button>
+                </div>
               </div>
             ))}
             {!products.length && <p className="text-sm text-muted-foreground">Belum ada produk.</p>}
