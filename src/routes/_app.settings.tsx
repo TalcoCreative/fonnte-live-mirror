@@ -694,63 +694,6 @@ function AgentRow({ r, me, busy, onSave, onDelete }: { r: any; me: string | null
 }
 
 
-function OpsTab() {
-  const [slaGreen, setSlaGreen] = useState("5");
-  const [slaYellow, setSlaYellow] = useState("10");
-  const [busy, setBusy] = useState(false);
-
-  async function loadAll() {
-    const [{ data: sg }, { data: sy }] = await Promise.all([
-      supabase.from("system_settings").select("value").eq("key", "sla_green_minutes").maybeSingle(),
-      supabase.from("system_settings").select("value").eq("key", "sla_yellow_minutes").maybeSingle(),
-    ]);
-    if (sg?.value) setSlaGreen(String(sg.value).replace(/"/g, ""));
-    if (sy?.value) setSlaYellow(String(sy.value).replace(/"/g, ""));
-  }
-  useEffect(() => { loadAll(); }, []);
-
-  async function saveSla() {
-    const g = parseInt(slaGreen, 10);
-    const y = parseInt(slaYellow, 10);
-    if (!Number.isFinite(g) || !Number.isFinite(y) || g <= 0 || y <= g) {
-      return toast.error("SLA tidak valid. Kuning harus > Hijau.");
-    }
-    setBusy(true);
-    const { error } = await supabase.from("system_settings").upsert([
-      { key: "sla_green_minutes", value: String(g) },
-      { key: "sla_yellow_minutes", value: String(y) },
-    ], { onConflict: "key" });
-    setBusy(false);
-    if (error) toast.error(error.message); else toast.success("Ambang SLA disimpan");
-  }
-
-  return (
-    <div className="space-y-4 mt-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Ambang SLA Inbox</CardTitle>
-          <CardDescription>
-            Indikator warna untuk percakapan belum dibaca: <span className="text-emerald-600 font-medium">Hijau</span> kurang dari ambang,
-            {" "}<span className="text-amber-600 font-medium">Kuning</span> di antara ambang, <span className="text-rose-600 font-medium">Merah</span> melewati ambang kuning.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-          <div className="space-y-1.5">
-            <Label>Hijau &lt; (menit)</Label>
-            <Input type="number" min={1} value={slaGreen} onChange={(e) => setSlaGreen(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Kuning &lt; (menit)</Label>
-            <Input type="number" min={2} value={slaYellow} onChange={(e) => setSlaYellow(e.target.value)} />
-          </div>
-          <Button onClick={saveSla} disabled={busy}>
-            {busy && <Loader2 className="size-4 mr-2 animate-spin" />}Simpan SLA
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 
 function WorkflowTab() {
