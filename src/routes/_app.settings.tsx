@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { WorkflowBuilderTab } from "@/components/workflow-builder";
+import { FRWeeklySchedule } from "@/components/fr-weekly-schedule";
 
 export const Route = createFileRoute("/_app/settings")({
   head: () => ({ meta: [{ title: "Settings — Husada CRM" }] }),
@@ -33,7 +34,7 @@ function SettingsPage() {
     { v: "quick", label: "Quick Replies" },
     { v: "products", label: "Produk" },
     { v: "team", label: "Tim Agent" },
-    { v: "shifts", label: "Shift & Jadwal" },
+    { v: "shifts", label: "Jadwal Mingguan FR" },
     { v: "webhook", label: "Webhook" },
   ];
   return (
@@ -62,7 +63,7 @@ function SettingsPage() {
         {tab === "quick" && <QuickRepliesTab />}
         {tab === "products" && <ProductsTab />}
         {tab === "team" && <TeamTab />}
-        {tab === "shifts" && <ShiftsTab />}
+        {tab === "shifts" && <FRWeeklySchedule />}
         {tab === "webhook" && <WebhookTab />}
       </div>
 
