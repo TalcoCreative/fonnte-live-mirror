@@ -244,10 +244,22 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
         return rec;
       }).sort((a, b) => a.avg - b.avg);
 
-      // Stage distribution & revenue (global — overview)
+      // Scope contacts: bila filter aktif, hanya contact yg assigned ke agent dlm scope
+      // ATAU punya conversation yg assigned ke agent dlm scope.
+      const allContacts = (contacts.data || []) as any[];
+      const openConvsAll = (openConv.data || []) as any[];
+      const scopedContactIds: Set<string> | null = scopeIds ? new Set<string>() : null;
+      if (scopedContactIds) {
+        allContacts.forEach((c: any) => { if (c.assigned_agent_id && scopeIds!.has(c.assigned_agent_id)) scopedContactIds.add(c.id); });
+        openConvsAll.forEach((c: any) => { if (c.assigned_agent_id && scopeIds!.has(c.assigned_agent_id)) scopedContactIds.add(c.contact_id); });
+      }
+      const scopedContacts = scopedContactIds ? allContacts.filter((c) => scopedContactIds.has(c.id)) : allContacts;
+      const scopedOpenConv = scopedContactIds ? openConvsAll.filter((c) => scopedContactIds.has(c.contact_id)) : openConvsAll;
+
+      // Stage distribution & revenue (scoped)
       const byStage: Record<string, { name: string; color: string; count: number }> = {};
       let totalRevenue = 0;
-      (contacts.data || []).forEach((r: any) => {
+      scopedContacts.forEach((r: any) => {
         const name = r.stages?.name || "Tanpa stage";
         const color = r.stages?.color || "#888";
         byStage[name] = byStage[name] || { name, color, count: 0 };
