@@ -325,14 +325,14 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
         avgHours: +(e.total / e.count / 3600).toFixed(2),
       })).sort((a, b) => b.count - a.count);
 
-      const myInbox = (openConv.data || []).filter((c: any) => c.assigned_agent_id === user?.id).length;
+      const myInbox = openConvsAll.filter((c: any) => c.assigned_agent_id === user?.id).length;
       const { data: myConvs } = await supabase.from("conversations").select("contact_id").eq("assigned_agent_id", user?.id || "00000000-0000-0000-0000-000000000000");
       const myLeadIds = new Set((myConvs || []).map((c: any) => c.contact_id));
-      const myLeadCount = (contacts.data || []).filter((c: any) => myLeadIds.has(c.id)).length;
+      const myLeadCount = allContacts.filter((c: any) => myLeadIds.has(c.id)).length;
 
       // Leads per agent (historical vs current) — scoped
       const contactMap: Record<string, any> = {};
-      (contacts.data || []).forEach((c: any) => { contactMap[c.id] = c; });
+      allContacts.forEach((c: any) => { contactMap[c.id] = c; });
 
       const histAgg: Record<string, { id: string; assignCount: number; contactIds: Set<string> }> = {};
       (assignLogs.data || []).forEach((l: any) => {
@@ -347,7 +347,7 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
       });
 
       const currentAgg: Record<string, { id: string; convs: any[] }> = {};
-      (openConv.data || []).forEach((c: any) => {
+      openConvsAll.forEach((c: any) => {
         if (!c.assigned_agent_id) return;
         if (scopeIds && !scopeIds.has(c.assigned_agent_id)) return;
         const id = c.assigned_agent_id;
@@ -377,8 +377,8 @@ function OverviewTab({ user, startISO, endISO, profiles, scopeIds }: {
         .sort((a, b) => b.currentCount - a.currentCount || b.historicalUnique - a.historicalUnique);
 
       setData({
-        totalContacts: (contacts.data || []).length,
-        openConv: openConv.count || 0,
+        totalContacts: scopedContacts.length,
+        openConv: scopedOpenConv.length,
         messagesRange: msgsScoped.length,
         teamAvg, agentStats, stageDist, topStage, totalRevenue,
         myInbox, myLeads: myLeadCount, dailySeries, transitions,
