@@ -676,15 +676,19 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
 
   useEffect(() => {
     (async () => {
-      const [evRes, stRes, ctRes, shRes, asRes] = await Promise.all([
+      // range tanggal (YYYY-MM-DD lokal) untuk lookup fr_date_shifts
+      const startDate = new Date(startISO).toISOString().slice(0, 10);
+      const endDate = new Date(endISO).toISOString().slice(0, 10);
+      const [evRes, stRes, ctRes, frShRes] = await Promise.all([
         supabase.from("audit_events")
           .select("event_type, actor_id, contact_id, conversation_id, occurred_at, new_value, old_value")
           .gte("occurred_at", startISO).lte("occurred_at", endISO)
           .order("occurred_at", { ascending: true }).limit(20000),
         supabase.from("stages").select("id, name, order_index"),
         supabase.from("contacts").select("id, full_name, whatsapp_number, stage_id, created_at"),
-        supabase.from("shifts").select("id, start_time, end_time, days_of_week, is_active").eq("is_active", true),
-        supabase.from("agent_shifts").select("agent_id, shift_id, effective_from"),
+        supabase.from("fr_date_shifts" as any)
+          .select("agent_id, work_date, start_time, end_time")
+          .gte("work_date", startDate).lte("work_date", endDate),
       ]);
       const events = evRes.data;
       const stagesAll = (stRes.data || []) as any[];
@@ -694,50 +698,34 @@ function FirstResponseTab({ startISO, endISO, profiles, scopeIds, frUserIds, div
       const contactById: Record<string, any> = {};
       (ctRes.data || []).forEach((c: any) => { contactById[c.id] = c; });
 
-      // Build shift lookup by agent
-      const shiftById: Record<string, any> = {};
-      ((shRes.data as any[]) || []).forEach((s) => { shiftById[s.id] = s; });
-      const agentShiftMap: Record<string, { shift: any; effective_from: string }[]> = {};
-      ((asRes.data as any[]) || []).forEach((a) => {
-        const s = shiftById[a.shift_id]; if (!s) return;
-        (agentShiftMap[a.agent_id] = agentShiftMap[a.agent_id] || []).push({ shift: s, effective_from: a.effective_from });
+      // FR schedule lookup by agent + date: key `${agentId}:${YYYY-MM-DD}` -> {sMin, eMin}
+      const frShiftByAgentDate: Record<string, { sMin: number; eMin: number }> = {};
+      ((frShRes.data as any[]) || []).forEach((r) => {
+        const [sh, sm] = String(r.start_time).split(":").map(Number);
+        const [eh, em] = String(r.end_time).split(":").map(Number);
+        frShiftByAgentDate[`${r.agent_id}:${r.work_date}`] = { sMin: sh * 60 + sm, eMin: eh * 60 + em };
       });
+      const anyFRSchedule = Object.keys(frShiftByAgentDate).length > 0;
 
-      // Untuk agent non-FR: jam kerja tetap Senin-Jumat 08:00-17:00.
-      // Untuk FR: pakai shift terjadwal dari tabel shifts + agent_shifts (custom mingguan).
-      const anyShiftConfigured = Object.keys(agentShiftMap).length > 0;
+      // Non-FR: fixed benchmark Mon–Fri 08:00–17:00.
+      // FR: per-date schedule dari fr_date_shifts. Jika tidak ada baris untuk (agent, tanggal),
+      // agent tsb dianggap tidak on-shift pada tanggal itu (kecuali belum ada jadwal FR sama sekali → dianggap 24/7 agar tidak nge-zero).
       function inShift(agentId: string, ts: number): boolean {
         const d = new Date(ts);
-        const dow = d.getDay();
-        const mins = d.getHours() * 60 + d.getMinutes();
         const isFR = frUserIds.has(agentId);
-
         if (!isFR) {
-          // Fixed benchmark: Mon-Fri 08:00-17:00
+          const dow = d.getDay();
+          const mins = d.getHours() * 60 + d.getMinutes();
           if (dow < 1 || dow > 5) return false;
           return mins >= 8 * 60 && mins < 17 * 60;
         }
-
-        // FR: use scheduled shifts
-        if (!anyShiftConfigured) return true;
-        const shifts = agentShiftMap[agentId];
-        if (!shifts || !shifts.length) return false;
-        const dayKey = d.toISOString().slice(0, 10);
-        for (const { shift, effective_from } of shifts) {
-          if (effective_from && effective_from > dayKey) continue;
-          const days: number[] = shift.days_of_week || [];
-          if (days.length && !days.includes(dow)) continue;
-          const [sh, sm] = String(shift.start_time).split(":").map(Number);
-          const [eh, em] = String(shift.end_time).split(":").map(Number);
-          const sMin = sh * 60 + sm;
-          const eMin = eh * 60 + em;
-          if (sMin <= eMin) {
-            if (mins >= sMin && mins < eMin) return true;
-          } else {
-            if (mins >= sMin || mins < eMin) return true;
-          }
-        }
-        return false;
+        if (!anyFRSchedule) return true;
+        const dayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const win = frShiftByAgentDate[`${agentId}:${dayKey}`];
+        if (!win) return false;
+        const mins = d.getHours() * 60 + d.getMinutes();
+        if (win.sMin <= win.eMin) return mins >= win.sMin && mins < win.eMin;
+        return mins >= win.sMin || mins < win.eMin;
       }
 
 
