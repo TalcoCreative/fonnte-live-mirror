@@ -1,122 +1,139 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 
-const DAY_LABELS = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
-const NAME_PREFIX = "__fr_weekly:"; // shift.name convention: __fr_weekly:{agentId}:{day}
+const DAY_LABELS = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 
 type Agent = { id: string; full_name: string | null; email: string | null };
-type Cell = { shiftId?: string; agentShiftId?: string; start: string; end: string; enabled: boolean };
+type Cell = { id?: string; start: string; end: string; enabled: boolean };
 
-/** Grid mingguan (Sen–Min × jam) per FR agent. Data disimpan sebagai shift bernama
- * `__fr_weekly:{agentId}:{day}` + baris agent_shifts, jadi kompatibel dgn perhitungan dashboard. */
+/** Format YYYY-MM-DD (lokal) */
+function ymd(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+/** Awal minggu (Senin) untuk tanggal ts */
+function startOfWeek(d: Date) {
+  const x = new Date(d);
+  const dow = x.getDay(); // 0=Min
+  const diff = dow === 0 ? -6 : 1 - dow;
+  x.setDate(x.getDate() + diff);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+/**
+ * Jadwal FR per TANGGAL (bukan template hari-minggu).
+ * Setiap tanggal punya jam mulai/selesai sendiri. Data disimpan di tabel
+ * `fr_date_shifts` (agent_id, work_date, start_time, end_time).
+ * Dashboard menghitung metrik FR berdasarkan tanggal + jam ini secara real.
+ */
 export function FRWeeklySchedule() {
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [cells, setCells] = useState<Record<string, Cell>>({});
+  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
+  const [cells, setCells] = useState<Record<string, Cell>>({}); // key = `${agentId}:${YYYY-MM-DD}`
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
 
-  async function load() {
-    setLoading(true);
+  const weekDates = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      return d;
+    });
+  }, [weekStart]);
+
+  const dateKeys = useMemo(() => weekDates.map(ymd), [weekDates]);
+  const rangeStart = dateKeys[0];
+  const rangeEnd = dateKeys[6];
+
+  async function loadAgents() {
     const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "first_response");
     const ids = (roles || []).map((r: any) => r.user_id);
-    if (!ids.length) { setAgents([]); setCells({}); setLoading(false); return; }
-    const [{ data: pf }, { data: sh }, { data: asg }] = await Promise.all([
-      supabase.from("profiles").select("id, full_name, email").in("id", ids),
-      supabase.from("shifts").select("*").like("name", `${NAME_PREFIX}%`),
-      supabase.from("agent_shifts").select("*"),
-    ]);
-    setAgents(((pf as any[]) || []).sort((a, b) => (a.full_name || a.email || "").localeCompare(b.full_name || b.email || "")));
+    if (!ids.length) { setAgents([]); return [] as string[]; }
+    const { data: pf } = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+    const list = (((pf as any[]) || []) as Agent[]).sort((a, b) =>
+      (a.full_name || a.email || "").localeCompare(b.full_name || b.email || ""),
+    );
+    setAgents(list);
+    return ids as string[];
+  }
 
-    const shiftByKey: Record<string, any> = {};
-    (sh || []).forEach((s: any) => { shiftByKey[s.name] = s; });
-    const asgByShift: Record<string, any> = {};
-    (asg || []).forEach((a: any) => { asgByShift[a.shift_id] = a; });
-
+  async function loadWeek(agentIds: string[]) {
+    setLoading(true);
     const next: Record<string, Cell> = {};
-    ids.forEach((aid: string) => {
-      for (let d = 0; d < 7; d++) {
-        const key = `${aid}:${d}`;
-        const shift = shiftByKey[`${NAME_PREFIX}${aid}:${d}`];
-        if (shift) {
-          const link = asgByShift[shift.id];
-          next[key] = {
-            shiftId: shift.id,
-            agentShiftId: link?.id,
-            start: (shift.start_time || "08:00").slice(0, 5),
-            end: (shift.end_time || "17:00").slice(0, 5),
-            enabled: !!link,
-          };
-        } else {
-          next[key] = { start: "08:00", end: "17:00", enabled: false };
-        }
-      }
+    agentIds.forEach((aid) => {
+      dateKeys.forEach((dk) => { next[`${aid}:${dk}`] = { start: "08:00", end: "17:00", enabled: false }; });
     });
+    if (agentIds.length) {
+      const { data } = await supabase
+        .from("fr_date_shifts" as any)
+        .select("id, agent_id, work_date, start_time, end_time")
+        .in("agent_id", agentIds)
+        .gte("work_date", rangeStart).lte("work_date", rangeEnd);
+      ((data as any[]) || []).forEach((r) => {
+        next[`${r.agent_id}:${r.work_date}`] = {
+          id: r.id,
+          start: String(r.start_time).slice(0, 5),
+          end: String(r.end_time).slice(0, 5),
+          enabled: true,
+        };
+      });
+    }
     setCells(next);
     setLoading(false);
   }
-  useEffect(() => { load(); }, []);
 
-  function updateCell(agentId: string, day: number, patch: Partial<Cell>) {
-    const key = `${agentId}:${day}`;
-    setCells((c) => ({ ...c, [key]: { ...c[key], ...patch } }));
+  useEffect(() => { loadAgents().then((ids) => loadWeek(ids)); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { if (agents.length) loadWeek(agents.map((a) => a.id)); /* eslint-disable-next-line */ }, [weekStart]);
+
+  function updateCell(agentId: string, dateKey: string, patch: Partial<Cell>) {
+    const k = `${agentId}:${dateKey}`;
+    setCells((c) => ({ ...c, [k]: { ...c[k], ...patch } }));
   }
 
-  async function saveCell(agentId: string, day: number) {
-    const key = `${agentId}:${day}`;
-    const cell = cells[key];
+  async function saveCell(agentId: string, dateKey: string) {
+    const k = `${agentId}:${dateKey}`;
+    const cell = cells[k];
     if (!cell) return;
-    setSaving(key);
+    setSaving(k);
     try {
-      const shiftName = `${NAME_PREFIX}${agentId}:${day}`;
-      let shiftId = cell.shiftId;
-      if (!shiftId) {
-        const { data, error } = await supabase.from("shifts").insert({
-          name: shiftName,
-          start_time: cell.start, end_time: cell.end,
-          color: "#0ea5e9", days_of_week: [day], is_active: true,
-        } as any).select("id").maybeSingle();
+      if (!cell.enabled) {
+        if (cell.id) {
+          await supabase.from("fr_date_shifts" as any).delete().eq("id", cell.id);
+          updateCell(agentId, dateKey, { id: undefined });
+        }
+      } else if (cell.id) {
+        const { error } = await supabase.from("fr_date_shifts" as any)
+          .update({ start_time: cell.start, end_time: cell.end })
+          .eq("id", cell.id);
         if (error) throw error;
-        shiftId = data?.id;
       } else {
-        const { error } = await supabase.from("shifts").update({
-          start_time: cell.start, end_time: cell.end, days_of_week: [day], is_active: true,
-        } as any).eq("id", shiftId);
+        const { data, error } = await supabase.from("fr_date_shifts" as any).insert({
+          agent_id: agentId, work_date: dateKey, start_time: cell.start, end_time: cell.end,
+        }).select("id").maybeSingle();
         if (error) throw error;
+        updateCell(agentId, dateKey, { id: (data as any)?.id });
       }
-
-      let linkId = cell.agentShiftId;
-      if (cell.enabled && !linkId) {
-        const { data, error } = await supabase.from("agent_shifts")
-          .insert({ agent_id: agentId, shift_id: shiftId } as any).select("id").maybeSingle();
-        if (error) throw error;
-        linkId = data?.id;
-      } else if (!cell.enabled && linkId) {
-        await supabase.from("agent_shifts").delete().eq("id", linkId);
-        linkId = undefined;
-      }
-      updateCell(agentId, day, { shiftId, agentShiftId: linkId });
       toast.success("Tersimpan");
     } catch (e: any) {
       toast.error(e.message || "Gagal simpan");
-    } finally {
-      setSaving(null);
-    }
+    } finally { setSaving(null); }
   }
 
-  async function clearCell(agentId: string, day: number) {
-    const key = `${agentId}:${day}`;
-    const cell = cells[key];
-    if (!cell?.shiftId) { updateCell(agentId, day, { enabled: false, start: "08:00", end: "17:00" }); return; }
-    setSaving(key);
+  async function clearCell(agentId: string, dateKey: string) {
+    const k = `${agentId}:${dateKey}`;
+    const cell = cells[k];
+    setSaving(k);
     try {
-      if (cell.agentShiftId) await supabase.from("agent_shifts").delete().eq("id", cell.agentShiftId);
-      await supabase.from("shifts").delete().eq("id", cell.shiftId);
-      setCells((c) => ({ ...c, [key]: { start: "08:00", end: "17:00", enabled: false } }));
+      if (cell?.id) await supabase.from("fr_date_shifts" as any).delete().eq("id", cell.id);
+      setCells((c) => ({ ...c, [k]: { start: "08:00", end: "17:00", enabled: false } }));
       toast.success("Dikosongkan");
     } catch (e: any) {
       toast.error(e.message || "Gagal");
@@ -124,28 +141,48 @@ export function FRWeeklySchedule() {
   }
 
   async function copyMondayToWeekdays(agentId: string) {
-    const src = cells[`${agentId}:1`];
+    const src = cells[`${agentId}:${dateKeys[0]}`];
     if (!src) return;
-    for (let d = 2; d <= 5; d++) {
-      updateCell(agentId, d, { start: src.start, end: src.end, enabled: src.enabled });
+    for (let i = 1; i <= 4; i++) {
+      const dk = dateKeys[i];
+      updateCell(agentId, dk, { start: src.start, end: src.end, enabled: src.enabled });
     }
-    toast.info("Klik Simpan di tiap sel untuk menyimpan.");
+    toast.info("Klik Simpan di tiap tanggal untuk menyimpan.");
   }
 
-  if (loading) return <div className="mt-4 text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Memuat…</div>;
+  function shiftWeek(delta: number) {
+    const x = new Date(weekStart);
+    x.setDate(x.getDate() + delta * 7);
+    setWeekStart(startOfWeek(x));
+  }
+
+  const weekLabel = `${weekDates[0].toLocaleDateString("id-ID", { day: "numeric", month: "short" })} – ${weekDates[6].toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}`;
 
   return (
     <div className="space-y-4 mt-4">
       <Card>
         <CardHeader>
-          <CardTitle>Jadwal Mingguan FR</CardTitle>
-          <CardDescription>
-            Atur jam kerja setiap First Response per hari. Metrik dashboard FR (avg first response, SLA, beban per jam) dihitung
-            <b> hanya di dalam jam ini</b>. Kosongkan hari = FR tidak dijadwalkan hari itu.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="flex items-center gap-2"><CalendarDays className="size-4" /> Jadwal FR per Tanggal</CardTitle>
+              <CardDescription>
+                Atur jam kerja FR untuk <b>tanggal spesifik</b> — bisa berbeda tiap minggu.
+                Dashboard FR (Avg First Response, SLA, Beban per Jam) memakai jadwal ini
+                sesuai tanggal & jam log yang benar-benar tercatat.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => shiftWeek(-1)}><ChevronLeft className="size-4" /></Button>
+              <Button size="sm" variant="outline" onClick={() => setWeekStart(startOfWeek(new Date()))}>Minggu ini</Button>
+              <Button size="sm" variant="outline" onClick={() => shiftWeek(1)}><ChevronRight className="size-4" /></Button>
+              <div className="text-sm font-medium ml-2 whitespace-nowrap">{weekLabel}</div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          {agents.length === 0 ? (
+          {loading ? (
+            <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="size-4 animate-spin" /> Memuat…</div>
+          ) : agents.length === 0 ? (
             <p className="text-sm text-muted-foreground">Belum ada agent dengan role First Response.</p>
           ) : (
             <div className="space-y-6">
@@ -161,36 +198,38 @@ export function FRWeeklySchedule() {
                     </Button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2">
-                    {DAY_LABELS.map((label, day) => {
-                      const key = `${a.id}:${day}`;
-                      const cell = cells[key];
-                      const busy = saving === key;
+                    {weekDates.map((d, i) => {
+                      const dk = dateKeys[i];
+                      const k = `${a.id}:${dk}`;
+                      const cell = cells[k];
+                      const busy = saving === k;
+                      const isToday = dk === ymd(new Date());
                       return (
-                        <div key={day} className={`rounded-lg border p-2 ${cell?.enabled ? "border-primary/60 bg-primary/5" : "bg-muted/20"}`}>
+                        <div key={dk} className={`rounded-lg border p-2 ${cell?.enabled ? "border-primary/60 bg-primary/5" : "bg-muted/20"} ${isToday ? "ring-1 ring-primary" : ""}`}>
                           <div className="flex items-center justify-between mb-1.5">
                             <label className="flex items-center gap-1.5 text-xs font-semibold cursor-pointer">
                               <input type="checkbox" checked={!!cell?.enabled}
-                                onChange={(e) => updateCell(a.id, day, { enabled: e.target.checked })}
+                                onChange={(e) => updateCell(a.id, dk, { enabled: e.target.checked })}
                                 className="size-3.5 cursor-pointer" />
-                              {label}
+                              {DAY_LABELS[i]} {d.getDate()}/{d.getMonth() + 1}
                             </label>
-                            {cell?.shiftId && (
-                              <button onClick={() => clearCell(a.id, day)} className="text-destructive/70 hover:text-destructive" title="Hapus">
+                            {cell?.id && (
+                              <button onClick={() => clearCell(a.id, dk)} className="text-destructive/70 hover:text-destructive" title="Hapus">
                                 <Trash2 className="size-3" />
                               </button>
                             )}
                           </div>
                           <div className="space-y-1">
                             <Input type="time" value={cell?.start || "08:00"}
-                              onChange={(e) => updateCell(a.id, day, { start: e.target.value })}
+                              onChange={(e) => updateCell(a.id, dk, { start: e.target.value })}
                               disabled={!cell?.enabled}
                               className="h-7 text-xs px-1.5" />
                             <Input type="time" value={cell?.end || "17:00"}
-                              onChange={(e) => updateCell(a.id, day, { end: e.target.value })}
+                              onChange={(e) => updateCell(a.id, dk, { end: e.target.value })}
                               disabled={!cell?.enabled}
                               className="h-7 text-xs px-1.5" />
                             <Button size="sm" className="w-full h-7 text-[11px]" disabled={busy}
-                              onClick={() => saveCell(a.id, day)}>
+                              onClick={() => saveCell(a.id, dk)}>
                               {busy ? <Loader2 className="size-3 animate-spin" /> : "Simpan"}
                             </Button>
                           </div>

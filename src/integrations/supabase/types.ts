@@ -429,6 +429,36 @@ export type Database = {
           },
         ]
       }
+      fr_date_shifts: {
+        Row: {
+          agent_id: string
+          created_at: string
+          end_time: string
+          id: string
+          start_time: string
+          updated_at: string
+          work_date: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          end_time?: string
+          id?: string
+          start_time?: string
+          updated_at?: string
+          work_date: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          end_time?: string
+          id?: string
+          start_time?: string
+          updated_at?: string
+          work_date?: string
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           content: string
